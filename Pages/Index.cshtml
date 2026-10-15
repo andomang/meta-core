@@ -1,0 +1,153 @@
+﻿@page
+@model IndexModel
+@{
+    ViewData["Title"] = "홈";
+}
+
+<!-- 메인 검색 영역 -->
+<div class="flex flex-col items-center justify-center min-h-[70vh] px-4">
+
+    <!-- 로고 + 부제목 -->
+    <div class="text-center mb-8">
+        <svg height="80" viewBox="0 0 400 120" xmlns="http://www.w3.org/2000/svg" class="mx-auto mb-4">
+            <defs>
+                <linearGradient id="hg1" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#3b82f6"/>
+                    <stop offset="50%" style="stop-color:#8b5cf6"/>
+                    <stop offset="100%" style="stop-color:#ec4899"/>
+                </linearGradient>
+                <linearGradient id="hg2" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#60a5fa"/>
+                    <stop offset="100%" style="stop-color:#c084fc"/>
+                </linearGradient>
+            </defs>
+            <circle cx="52" cy="52" r="34" fill="none" stroke="url(#hg1)" stroke-width="5"/>
+            <line x1="78" y1="78" x2="104" y2="104" stroke="url(#hg1)" stroke-width="5" stroke-linecap="round"/>
+            <polyline points="34,70 34,34 52,56 70,34 70,70" fill="none" stroke="url(#hg2)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+            <text x="124" y="60" font-family="Arial, sans-serif" font-size="46" font-weight="900" fill="url(#hg1)" letter-spacing="-1">Meta</text>
+            <text x="127" y="95" font-family="Arial, sans-serif" font-size="20" font-weight="400" fill="#8b5cf6" letter-spacing="8">SEARCH</text>
+            <line x1="127" y1="103" x2="390" y2="103" stroke="url(#hg1)" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+        <p class="text-gray-500 dark:text-slate-400 text-sm">@Model.SubtitleText</p>
+    </div>
+
+    <!-- 검색 입력 박스 -->
+    <div class="w-full max-w-xl relative" id="searchWrap">
+        <div class="relative">
+            <input type="text" id="searchInput" autocomplete="off"
+                   placeholder="@Model.PlaceholderText"
+                   class="w-full h-14 px-5 pr-14 rounded-2xl border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white text-base focus:border-blue-500 focus:ring-4 focus:ring-blue-200/50 dark:focus:ring-blue-800/50 outline-none transition-all" />
+            <button type="button" onclick="doSearch()"
+                    class="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 text-white rounded-xl flex items-center justify-center cursor-pointer">
+                <i data-lucide="search" class="w-5 h-5"></i>
+            </button>
+        </div>
+
+        <!-- 검색 기록 드롭다운 -->
+        <div id="historyDrop" class="hidden absolute left-0 right-0 top-16 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border dark:border-slate-700 z-50 overflow-hidden max-h-60 overflow-y-auto">
+        </div>
+    </div>
+
+    <!-- 바로가기 카드 -->
+    <div class="flex gap-4 mt-10">
+        <a href="/Community" class="flex flex-col items-center gap-2 px-6 py-4 bg-white dark:bg-slate-800 rounded-2xl shadow hover:shadow-lg transition-all group">
+            <i data-lucide="message-circle" class="w-6 h-6 text-blue-500 group-hover:scale-110 transition-transform"></i>
+            <span class="text-xs font-bold dark:text-slate-300">@Model.CommunityText</span>
+        </a>
+        <a href="/Settings" class="flex flex-col items-center gap-2 px-6 py-4 bg-white dark:bg-slate-800 rounded-2xl shadow hover:shadow-lg transition-all group">
+            <i data-lucide="settings" class="w-6 h-6 text-purple-500 group-hover:scale-110 transition-transform"></i>
+            <span class="text-xs font-bold dark:text-slate-300">@Model.SettingsText</span>
+        </a>
+        <!-- 작동방식 버튼 → 검색 품질 평가 리포트 링크 -->
+        <a href="/EvalReport" class="flex flex-col items-center gap-2 px-6 py-4 bg-white dark:bg-slate-800 rounded-2xl shadow hover:shadow-lg transition-all group">
+            <i data-lucide="bar-chart-2" class="w-6 h-6 text-pink-500 group-hover:scale-110 transition-transform"></i>
+            <span class="text-xs font-bold dark:text-slate-300">작동방식</span>
+        </a>
+    </div>
+</div>
+
+<!-- 로딩 오버레이 -->
+<div id="loadingOverlay" class="hidden fixed inset-0 bg-white/80 dark:bg-slate-900/80 z-[300] flex flex-col items-center justify-center gap-6">
+    <div class="w-16 h-16 border-4 border-gray-200 dark:border-slate-700 border-t-blue-500 rounded-full animate-spin"></div>
+    <div class="w-64 space-y-3">
+        <div class="h-3 bg-gray-200 dark:bg-slate-700 rounded-full animate-pulse"></div>
+        <div class="h-3 bg-gray-200 dark:bg-slate-700 rounded-full animate-pulse w-4/5"></div>
+        <div class="h-3 bg-gray-200 dark:bg-slate-700 rounded-full animate-pulse w-3/5"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    // Lucide 아이콘 재초기화
+    lucide.createIcons();
+
+    var searchInput = document.getElementById('searchInput');
+    var historyDrop = document.getElementById('historyDrop');
+
+    // Enter 키 → 검색 실행
+    searchInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); doSearch(); }
+    });
+
+    // 포커스 시 검색 기록 로드
+    searchInput.addEventListener('focus', function() { loadHistory(); });
+
+    // 외부 클릭 시 드롭다운 닫기
+    document.addEventListener('click', function(e) {
+        if (!document.getElementById('searchWrap').contains(e.target))
+            historyDrop.classList.add('hidden');
+    });
+
+    // 검색 실행
+    function doSearch() {
+        var q = searchInput.value.trim();
+        if (!q) return;
+        document.getElementById('loadingOverlay').classList.remove('hidden');
+        window.location.href = '/SearchResults?q=' + encodeURIComponent(q);
+    }
+
+    // 검색 기록 로드
+    function loadHistory() {
+        fetch('/api/search?action=history')
+            .then(function(r){ return r.json(); })
+            .then(function(list){
+                if (!list || list.length === 0) { historyDrop.classList.add('hidden'); return; }
+                historyDrop.innerHTML = list.map(function(item){
+                    return '<div class="flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-slate-700 cursor-pointer border-b dark:border-slate-700 last:border-0">'
+                        + '<span class="text-sm dark:text-slate-300 flex-1 truncate" onclick="useHistory(\'' + escapeHtml(item.query) + '\')">'
+                        + '<i data-lucide="clock" class="w-3 h-3 inline mr-2 text-gray-400"></i>' + escapeHtml(item.query) + '</span>'
+                        + '<button type="button" onclick="deleteHistory(' + item.id + ', this)" class="text-gray-400 hover:text-red-500 ml-2 text-lg leading-none">×</button>'
+                        + '</div>';
+                }).join('');
+                historyDrop.classList.remove('hidden');
+                lucide.createIcons();
+            }).catch(function(){ historyDrop.classList.add('hidden'); });
+    }
+
+    // 검색 기록 선택
+    function useHistory(q) {
+        searchInput.value = q;
+        historyDrop.classList.add('hidden');
+        doSearch();
+    }
+
+    // 검색 기록 삭제
+    function deleteHistory(id, btn) {
+        fetch('/api/search?action=deleteHistory&id=' + id).then(function(){
+            var row = btn.parentNode;
+            if (row && row.parentNode) {
+                row.parentNode.removeChild(row);
+                if (historyDrop.querySelectorAll('div').length === 0)
+                    historyDrop.classList.add('hidden');
+            }
+        });
+    }
+
+    // HTML 이스케이프
+    function escapeHtml(t) {
+        var d = document.createElement('div');
+        d.textContent = t;
+        return d.innerHTML;
+    }
+</script>
+}

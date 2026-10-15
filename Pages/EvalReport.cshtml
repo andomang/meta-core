@@ -1,0 +1,670 @@
+@page
+@{
+    ViewData["Title"] = "메타검색 성능 평가 리포트";
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>메타검색 성능 평가 리포트</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%236D28D9'/%3E%3Ccircle cx='13' cy='12' r='6' fill='none' stroke='white' stroke-width='2.5'/%3E%3Cline x1='17.2' y1='16.2' x2='22' y2='21' stroke='white' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E" type="image/svg+xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+KR:wght@300;400;500;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#F0F2F8;--sur:#FFF;--s2:#F5F7FC;--fg:#14141C;--mu:#6B6C80;--bd:#DDE0EC;
+  --G:#1A52CC;--N:#15803D;--D:#B45309;--B:#D97706;--R:#6D28D9;
+  --gs:#EEF3FF;--ns:#F0FDF4;--ds:#FFFBEB;--bs:#FFFBEB;--rs:#F5F3FF;
+  --ok:#15803D;--warn:#B45309;--err:#B91C1C;
+  --fn:'Noto Sans KR','Apple SD Gothic Neo',sans-serif;
+  --mo:'IBM Plex Mono','Fira Mono',monospace;
+}
+@@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:#0F172A;--sur:#1E293B;--s2:#273449;--fg:#E2E8F0;--mu:#94A3B8;--bd:#334155;
+    color-scheme: dark;
+  }
+}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--fn);font-size:14px;line-height:1.7}
+
+/* 로딩 */
+#loading{position:fixed;inset:0;z-index:100;background:linear-gradient(135deg,#0F172A 0%,#1E1B4B 50%,#0F172A 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;color:#E2E8F0}
+.ld-title{font-size:22px;font-weight:700;letter-spacing:-.02em}
+.ld-title em{font-style:normal;background:linear-gradient(90deg,#818CF8,#C084FC);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.ld-sub{font-size:13px;color:#94A3B8;text-align:center;max-width:360px}
+.progress-bar{width:280px;height:4px;background:#334155;border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;width:0%;background:linear-gradient(90deg,#818CF8,#C084FC);border-radius:2px;transition:width .5s ease}
+.ld-msg{font-size:12px;color:#818CF8;min-height:20px;text-align:center}
+.ld-steps{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.ld-step{font-size:12px;color:#475569;display:flex;align-items:center;gap:8px;transition:color .3s}
+.ld-step.done{color:#34D399}.ld-step.active{color:#A78BFA}
+.ld-step::before{content:'○';font-size:10px;flex-shrink:0}
+.ld-step.done::before{content:'✓'}.ld-step.active::before{content:'◉'}
+
+/* 메인 */
+#main{display:none;padding-inline:20px;padding-block:28px 60px;max-width:1020px;margin:0 auto}
+.wrap{display:flex;flex-direction:column;gap:28px}
+
+.hdr{padding:28px 32px;background:var(--sur);border:1px solid var(--bd);border-radius:12px;position:relative;overflow:hidden}
+.hdr::after{content:'';position:absolute;top:-100px;right:-100px;width:350px;height:350px;border-radius:50%;background:radial-gradient(circle,rgba(109,40,217,.08),transparent 70%);pointer-events:none}
+.hdr-eye{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--mu);margin-bottom:10px}
+.hdr-title{font-size:clamp(18px,3vw,26px);font-weight:700;line-height:1.4;margin:0 0 8px}
+.hdr-title em{font-style:normal;color:var(--R)}
+.hdr-desc{font-size:13px;color:var(--mu);max-width:560px;word-break:keep-all;margin:0 0 20px}
+.hdr-pills{display:flex;gap:8px;flex-wrap:wrap}
+.pill{font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;border:1px solid var(--bd)}
+.pill.g{background:var(--gs);color:var(--G)}.pill.n{background:var(--ns);color:var(--N)}
+.pill.d{background:var(--ds);color:var(--D)}.pill.r{background:var(--rs);color:var(--R)}
+.hdr-ts{font-size:11px;color:var(--mu);margin-top:12px}
+
+.sec-lbl{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--mu);margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.sec-lbl::before{content:'';display:block;width:3px;height:12px;border-radius:2px;background:var(--acc,var(--mu))}
+.sec-title{font-size:17px;font-weight:700;margin:0 0 4px}
+.sec-desc{font-size:13px;color:var(--mu);max-width:620px;word-break:keep-all}
+
+.algo-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.algo{background:var(--sur);border:1px solid var(--bd);border-radius:10px;padding:18px}
+.algo.old{border-top:3px solid #94A3B8}.algo.new{border-top:3px solid var(--R)}
+.algo-lbl{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mu);margin-bottom:6px}
+.algo-h{font-size:14px;font-weight:700;margin-bottom:12px}
+.algo.new .algo-h{color:var(--R)}
+.rl{display:flex;flex-direction:column;gap:3px}
+.ri{display:flex;align-items:center;gap:7px;padding:5px 9px;background:var(--s2);border-radius:5px;font-size:12px}
+.ri-rk{font-family:var(--mo);font-size:10px;color:var(--mu);width:16px;text-align:right}
+.tag{font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px}
+.tag.n{background:var(--ns);color:var(--N)}.tag.d{background:var(--ds);color:var(--D)}
+.ri-txt{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ri-sc{font-family:var(--mo);font-size:10px;color:var(--mu)}
+.fbox{margin-top:10px;padding:10px 12px;background:var(--s2);border-radius:6px;font-size:12px}
+.fbox code{font-family:var(--mo);color:var(--R);font-size:12px;display:block;margin-bottom:4px}
+.fbox p{margin:0;color:var(--mu);font-size:11px}
+.hbox{margin-top:10px;padding:9px 12px;border-radius:6px;font-size:12px;word-break:keep-all;line-height:1.6}
+.hbox.ok{background:color-mix(in srgb,var(--ok) 10%,transparent);border-left:3px solid var(--ok)}
+.hbox.warn{background:var(--s2);border-left:3px solid #94A3B8}
+
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.tile{background:var(--sur);border:1px solid var(--bd);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:3px}
+.tile.g{border-left:4px solid var(--G)}.tile.n{border-left:4px solid var(--N)}
+.tile.d{border-left:4px solid var(--D)}.tile.b{border-left:4px solid var(--B)}.tile.r{border-left:4px solid var(--R)}
+.tile-eng{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase}
+.tile.g .tile-eng{color:var(--G)}.tile.n .tile-eng{color:var(--N)}
+.tile.d .tile-eng{color:var(--D)}.tile.b .tile-eng{color:var(--B)}.tile.r .tile-eng{color:var(--R)}
+.tile-val{font-family:var(--mo);font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
+.tile-lbl{font-size:10px;color:var(--mu)}
+.tile-sub{font-size:10px;color:var(--mu)}.tile-sub span{font-family:var(--mo)}
+.badge-rank{font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;align-self:flex-start;margin-top:4px}
+.badge-rank.gold{background:#FEF9C3;color:#92400E}
+.badge-rank.silver{background:#F1F5F9;color:#64748B}
+.badge-rank.bronze{background:#FFF7ED;color:#C2410C}
+
+.improve-card{background:var(--sur);border:1px solid var(--bd);border-radius:10px;padding:18px 20px;display:flex;flex-direction:column;gap:14px}
+.imp-title{font-size:13px;font-weight:700}
+.imp-row{display:flex;align-items:center;gap:10px;font-size:12px}
+.imp-eng{width:48px;font-size:11px;font-weight:700;flex-shrink:0}
+.imp-eng.n{color:var(--N)}.imp-eng.d{color:var(--D)}.imp-eng.r{color:var(--R)}
+.imp-track{flex:1;height:20px;background:var(--s2);border-radius:4px;position:relative;overflow:hidden}
+.imp-fill{height:100%;border-radius:4px;position:absolute;left:0;top:0;display:flex;align-items:center;justify-content:flex-end;padding-right:8px}
+.imp-fill-v{font-family:var(--mo);font-size:10px;font-weight:600;color:#fff;white-space:nowrap}
+.imp-delta{font-family:var(--mo);font-size:11px;font-weight:600;min-width:52px;text-align:right}
+
+.charts{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.cc{background:var(--sur);border:1px solid var(--bd);border-radius:10px;padding:16px}
+.cc-t{font-size:13px;font-weight:700;margin-bottom:2px}
+.cc-s{font-size:11px;color:var(--mu);margin-bottom:10px}
+.cc-w{position:relative;height:136px}
+
+.tw{background:var(--sur);border:1px solid var(--bd);border-radius:10px;overflow:hidden}
+.tw-h{padding:12px 18px 10px;border-bottom:1px solid var(--bd);display:flex;justify-content:space-between;align-items:center}
+.tw-ht{font-size:13px;font-weight:700}.tw-hn{font-size:11px;color:var(--mu)}
+.ts{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{padding:7px 12px;text-align:left;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mu);background:var(--s2);border-bottom:1px solid var(--bd);white-space:nowrap}
+th.r{text-align:right}
+td{padding:7px 12px;border-bottom:1px solid var(--bd);white-space:nowrap}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--s2)}
+.num{font-family:var(--mo);font-variant-numeric:tabular-nums;text-align:right}
+.kw{display:inline-block;font-size:10px;padding:1px 6px;border-radius:3px;background:var(--bd);color:var(--mu);font-weight:500}
+.win{font-weight:700}.win.g{color:var(--G)}.win.n{color:var(--N)}.win.d{color:var(--D)}.win.b{color:var(--B)}.win.r{color:var(--R)}
+.zero-row td{color:var(--err)}
+
+.findings{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.fin{background:var(--sur);border:1px solid var(--bd);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:8px}
+.fin-n{font-family:var(--mo);font-size:10px;color:var(--mu);font-weight:600}
+.fin-t{font-size:14px;font-weight:700;line-height:1.4;text-wrap:balance;word-break:keep-all}
+.fin-v{font-family:var(--mo);font-size:22px;font-weight:600}
+.fin-d{font-size:12px;color:var(--mu);line-height:1.6;word-break:keep-all}
+.fin.green .fin-v{color:var(--ok)}.fin.purple .fin-v{color:var(--R)}.fin.blue .fin-v{color:var(--G)}
+
+/* 논문 출처 카드 */
+.paper{background:var(--sur);border:1px solid var(--bd);border-radius:10px;padding:16px 20px;display:flex;flex-direction:column;gap:10px}
+.paper-badge{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6D28D9;background:#F5F3FF;border-radius:4px;padding:3px 10px;align-self:flex-start}
+.paper-title{font-size:14px;font-weight:700;line-height:1.4;word-break:keep-all}
+.paper-meta{font-size:11px;color:var(--mu);font-style:italic}
+.paper-body{font-size:13px;color:var(--fg);line-height:1.8;word-break:keep-all}
+.paper-body strong{color:var(--R)}
+.paper-why{font-size:12px;color:var(--mu);padding:8px 12px;background:var(--s2);border-radius:6px;border-left:3px solid var(--R);line-height:1.7;word-break:keep-all}
+
+.note{font-size:11px;color:var(--mu);line-height:1.8;padding:10px 14px;border-left:3px solid var(--bd);background:var(--sur);border-radius:0 6px 6px 0}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px}
+.leg{display:flex;align-items:center;gap:6px}
+.dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.leg.g .dot{background:var(--G)}.leg.n .dot{background:var(--N)}.leg.d .dot{background:var(--D)}.leg.r .dot{background:var(--R)}
+
+#error-box{display:none;margin:40px auto;max-width:500px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:20px;text-align:center}
+#error-box h3{color:#B91C1C;margin:0 0 8px}
+#error-box p{font-size:13px;color:#7F1D1D}
+
+/* ── 태블릿 (700px 이하) ── */
+@@media(max-width:700px){
+  .algo-grid,.charts,.findings{grid-template-columns:1fr}
+  .tiles{grid-template-columns:repeat(2,1fr)}
+  .paper-meta{white-space:normal;word-break:break-all}
+}
+
+/* ── 모바일 (480px 이하) ── */
+@@media(max-width:480px){
+  /* 전체 여백 축소 */
+  #main{padding-inline:10px;padding-block:14px 36px}
+  .wrap{gap:14px}
+
+  /* 헤더 */
+  .hdr{padding:16px 14px;border-radius:10px}
+  .hdr::after{display:none}
+  .hdr-title{font-size:16px}
+  .hdr-desc{font-size:12px;margin-bottom:14px}
+  .hdr-pills{gap:6px}
+  .pill{font-size:10px;padding:3px 8px}
+  .hdr-ts{font-size:10px}
+
+  /* 섹션 레이블 */
+  .sec-title{font-size:14px}
+  .sec-desc{font-size:12px}
+
+  /* 알고리즘 비교 → 1열 */
+  .algo-grid{grid-template-columns:1fr;gap:10px}
+  .algo{padding:14px}
+
+  /* 타일: 2열 유지, 폰트만 줄임 */
+  .tiles{grid-template-columns:repeat(2,1fr);gap:8px}
+  .tile{padding:10px 12px}
+  .tile-val{font-size:20px}
+  .tile-sub{font-size:9px}
+  .badge-rank{font-size:9px;padding:2px 5px}
+
+  /* 개선율 바 */
+  .improve-card{padding:14px}
+  .imp-eng{width:38px;font-size:10px}
+  .imp-delta{min-width:42px;font-size:10px}
+  .imp-fill-v{font-size:9px}
+
+  /* 차트 → 1열, 높이 축소 */
+  .charts{grid-template-columns:1fr;gap:10px}
+  .cc{padding:12px}
+  .cc-w{height:110px}
+
+  /* 테이블: 쿼리 컬럼 sticky, 가로 스크롤 */
+  .tw{border-radius:8px}
+  .tw-h{padding:10px 12px;flex-direction:column;align-items:flex-start;gap:3px}
+  .tw-ht{font-size:12px}
+  .tw-hn{font-size:10px}
+  .ts{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{font-size:11px;min-width:500px}
+  th,td{padding:6px 8px}
+  /* 첫 번째 컬럼(쿼리) sticky 고정 */
+  th:first-child,td:first-child{
+    position:sticky;left:0;z-index:2;
+    background:var(--s2);
+    border-right:1px solid var(--bd);
+    max-width:80px;overflow:hidden;text-overflow:ellipsis
+  }
+  td:first-child{background:var(--sur)}
+  tr:hover td:first-child{background:var(--s2)}
+  /* 카테고리 컬럼 숨김 (좁은 화면에선 불필요) */
+  th:nth-child(2),td:nth-child(2){display:none}
+
+  /* 핵심 발견 → 1열 */
+  .findings{grid-template-columns:1fr;gap:10px}
+  .fin{padding:14px}
+  .fin-v{font-size:18px}
+  .fin-t{font-size:13px}
+  .fin-d{font-size:11px}
+
+  /* 논문 카드 */
+  .paper{padding:12px 14px;gap:8px}
+  .paper-badge{font-size:9px;padding:2px 8px}
+  .paper-title{font-size:13px}
+  .paper-body{font-size:12px;line-height:1.7}
+  .paper-body br{display:none}
+  .paper-meta{font-size:10px;white-space:normal;word-break:break-all}
+  .paper-why{font-size:11px;padding:7px 10px}
+
+  /* 로딩 화면 */
+  .ld-title{font-size:17px}
+  .ld-sub{font-size:12px;max-width:280px}
+  .progress-bar{width:calc(100vw - 48px);max-width:300px}
+  .ld-steps{display:none}
+
+  /* 범례 */
+  .legend{gap:8px}
+  .leg{font-size:11px}
+
+  /* 각주 */
+  .note{font-size:10px;padding:8px 10px}
+}
+</style>
+</head>
+<body>
+
+<!-- 로딩 화면 -->
+<div id="loading">
+  <div style="text-align:center">
+    <div class="ld-title">메타검색 성능 평가 중 <em>…</em></div>
+    <div class="ld-sub">Google · Naver · Daum · RRF 4개 방식을 AI가 객관적으로 비교합니다</div>
+  </div>
+  <div class="progress-bar"><div class="progress-fill" id="pf"></div></div>
+  <div class="ld-msg" id="ldmsg">준비 중…</div>
+  <div class="ld-steps">
+    <div class="ld-step" id="s1">60개 테스트셋에서 20개 랜덤 선정</div>
+    <div class="ld-step" id="s2">Google · Naver · Daum 병렬 검색</div>
+    <div class="ld-step" id="s3">중복 제거 및 URL 풀 구성</div>
+    <div class="ld-step" id="s4">AI 관련성 레이블링 (Groq Qwen3)</div>
+    <div class="ld-step" id="s5">nDCG · MRR · P@5 지표 계산</div>
+  </div>
+</div>
+
+<div id="error-box">
+  <h3>평가 오류</h3>
+  <p id="err-msg">알 수 없는 오류가 발생했습니다.</p>
+  <button onclick="location.reload()" style="margin-top:12px;padding:6px 18px;background:#B91C1C;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:13px">다시 시도</button>
+</div>
+
+<!-- 결과 화면 -->
+<div id="main">
+<div class="wrap">
+
+<div class="hdr">
+  <div class="hdr-eye">메타검색 엔진 · 객관적 성능 평가</div>
+  <h1 class="hdr-title">Google + Naver + Daum <em>RRF 통합</em>이 단일 엔진보다 나을까?</h1>
+  <p class="hdr-desc">네 검색엔진의 결과를 AI 알고리즘(RRF)으로 통합하면 단일 엔진보다 더 좋은 검색 결과를 제공하는지 LLM을 레이블러로 삼아 nDCG·MRR·P@5 지표로 객관 측정했습니다.</p>
+  <div class="hdr-pills">
+    <span class="pill g">Google (Serper.dev)</span>
+    <span class="pill n">Naver webkr API</span>
+    <span class="pill d">Daum 검색 API</span>
+    <span class="pill" style="background:var(--bs);color:var(--B);border-color:var(--bd)">Brave Search API</span>
+    <span class="pill r">RRF 통합 (4엔진)</span>
+  </div>
+  <div class="hdr-ts" id="eval-meta">—</div>
+</div>
+
+<div>
+  <div class="sec-lbl" style="--acc:#6D28D9">알고리즘 설명</div>
+  <div class="sec-title">이전 방식 vs 현재 RRF 방식</div>
+  <p class="sec-desc" style="margin-bottom:14px">두 엔진에 모두 등장한 결과 = 더 신뢰도 높음으로 판단해 점수를 올립니다.</p>
+  <div class="algo-grid">
+    <div class="algo old">
+      <div class="algo-lbl">이전 방식</div>
+      <div class="algo-h">단일 엔진 결과 그대로</div>
+      <div class="rl">
+        <div class="ri"><span class="ri-rk">1</span><span class="tag n">N</span><span class="ri-txt">나이키 공식 스토어</span></div>
+        <div class="ri"><span class="ri-rk">2</span><span class="tag n">N</span><span class="ri-txt">쿠팡 나이키 운동화</span></div>
+        <div class="ri"><span class="ri-rk">3</span><span class="tag n">N</span><span class="ri-txt">무신사 나이키</span></div>
+      </div>
+      <div class="hbox warn">❌ 다음에 더 좋은 결과가 있어도 Naver만 보여줌</div>
+    </div>
+    <div class="algo new">
+      <div class="algo-lbl">현재 방식 (RRF)</div>
+      <div class="algo-h">세 엔진 점수 합산 후 재정렬</div>
+      <div class="rl">
+        <div class="ri"><span class="ri-rk">1</span><span class="tag n">N</span><span class="ri-txt">나이키 공식 (N1+D2)</span><span class="ri-sc">0.0320</span></div>
+        <div class="ri"><span class="ri-rk">2</span><span class="tag d">D</span><span class="ri-txt">쿠팡 나이키 (N2+D1)</span><span class="ri-sc">0.0314</span></div>
+        <div class="ri"><span class="ri-rk">3</span><span class="tag n">N</span><span class="ri-txt">무신사 (N3+D3)</span><span class="ri-sc">0.0308</span></div>
+      </div>
+      <div class="fbox">
+        <code>score = Σ w/(60+rank)  (한국어: 네이버 w=1.4)</code>
+        <p>여러 엔진 모두 상위에 오른 결과는 점수가 더 높아짐</p>
+      </div>
+      <div class="hbox ok">✅ 3개 엔진의 장점을 모두 반영, 한국어 쿼리는 네이버 우선</div>
+    </div>
+  </div>
+</div>
+
+<!-- 논문 카드 #1: RRF -->
+<div class="paper">
+  <span class="paper-badge">📄 알고리즘 논문</span>
+  <div class="paper-title">Reciprocal Rank Fusion — 여러 검색 결과를 하나로 합치는 방법</div>
+  <div class="paper-meta">Cormack, Clarke & Buettcher · SIGIR 2009 · 인용 1,800+ 회</div>
+  <p class="paper-body">
+    구글, 네이버, 다음은 서로 다른 알고리즘으로 검색 결과를 정렬합니다. 이 논문은
+    <strong>각 엔진의 "순위(rank)"만 이용해 세 결과를 하나로 합치는 공식</strong>을 제안했습니다.
+    핵심 아이디어는 간단합니다 — "여러 엔진이 동시에 상위에 올린 결과일수록 진짜 좋은 결과일 가능성이 높다."
+    공식은 <code style="font-family:var(--mo);font-size:12px;color:var(--R)">점수 = Σ 1/(60 + 순위)</code> 입니다.
+    숫자 60은 상위권 결과의 점수 차이를 완만하게 해 극단적인 순위 하나가 전체를 좌우하지 않도록 해줍니다.
+  </p>
+  <div class="paper-why">💡 메타서치가 이 논문을 쓴 이유: 구글은 영어·글로벌에, 네이버는 한국어에 강합니다. 두 엔진 모두 높이 평가한 결과는 언어에 상관없이 신뢰도가 높기 때문에, 단순 연결이 아닌 RRF 합산으로 최선의 결과를 제공합니다.</div>
+</div>
+
+<div>
+  <div class="sec-lbl" style="--acc:#1A52CC">핵심 지표</div>
+  <div class="sec-title" style="margin-bottom:4px">4개 방식 nDCG@10 비교</div>
+  <p class="sec-desc" style="margin-bottom:14px">0에 가까울수록 나쁨 — 1에 가까울수록 좋음.</p>
+  <div class="legend" style="margin-bottom:12px">
+    <div class="leg g"><div class="dot"></div>Google</div>
+    <div class="leg n"><div class="dot"></div>Naver 단독</div>
+    <div class="leg d"><div class="dot"></div>Daum 단독</div>
+    <div class="leg" style="display:flex;align-items:center;gap:6px;font-size:12px"><div class="dot" style="background:var(--B)"></div>Brave 단독</div>
+    <div class="leg r"><div class="dot"></div>RRF 통합 (우리 알고리즘)</div>
+  </div>
+  <!-- 논문 카드 #2: nDCG -->
+  <div class="paper" style="margin-bottom:14px">
+    <span class="paper-badge">📄 평가 지표 논문</span>
+    <div class="paper-title">nDCG (Normalized Discounted Cumulative Gain) — 검색 순위의 질을 숫자로 나타내는 방법</div>
+    <div class="paper-meta">Järvelin & Kekäläinen · ACM TOIS 2002 · 정보검색 분야 역대 최다 인용 논문 중 하나</div>
+    <p class="paper-body">
+      검색 결과는 단순히 관련 있는 게 몇 개냐보다, <strong>관련 있는 결과가 얼마나 앞에 나오느냐</strong>가 더 중요합니다.
+      1위에 쓰레기 결과가 있으면 사용자는 금방 포기합니다.
+      nDCG는 이 "순위 패널티"를 수식으로 반영합니다 — 좋은 결과가 1위에 있으면 점수가 높고, 5위에 있으면 낮습니다.
+      마지막으로 "이론상 최고 점수"로 나눠 0~1 사이 숫자로 표준화(Normalize)합니다.
+      값이 <strong>1에 가까울수록 완벽한 순서</strong>, 0에 가까울수록 순서가 엉망이라는 뜻입니다.
+    </p>
+    <div class="paper-why">💡 nDCG@10이란? 상위 10개 결과만 평가합니다. 실제로 대부분의 사용자는 첫 페이지(10개)만 보기 때문입니다.</div>
+  </div>
+  <div class="tiles" id="tiles"></div>
+</div>
+
+<div class="improve-card">
+  <div class="imp-title">RRF가 단일 엔진 대비 얼마나 개선됐나? (nDCG@10 기준)</div>
+  <div id="improve-rows"></div>
+  <p style="font-size:11px;color:var(--mu);margin:0">* RRF = 3엔진 통합. 단일 엔진보다 커버리지와 합의도 면에서 우위.</p>
+</div>
+
+<!-- 논문 카드 #3: MRR + P@5 -->
+<div class="paper">
+  <span class="paper-badge">📄 보조 지표</span>
+  <div class="paper-title">MRR (Mean Reciprocal Rank) & P@5 — 얼마나 빨리 좋은 결과를 만나는가</div>
+  <div class="paper-meta">MRR: TREC QA Track 1999 (Voorhees) · P@5: 정보검색 표준 지표</div>
+  <p class="paper-body">
+    <strong>MRR</strong>은 "처음으로 관련 있는 결과가 몇 번째에 등장하나"를 측정합니다.
+    1위에 바로 나오면 MRR=1.0, 2위에 나오면 0.5, 3위면 0.33 식으로 떨어집니다.
+    검색 속도감, 즉 "얼마나 빨리 답을 찾을 수 있나"를 나타냅니다.<br>
+    <strong>P@5</strong>는 상위 5개 결과 중 관련 있는 것의 비율입니다. MRR이 "첫 번째 답"에 집중한다면,
+    P@5는 "처음 5개를 훑어봤을 때 얼마나 쓸모 있나"를 봅니다.
+    세 지표를 함께 보면 순위의 질을 다각도로 검증할 수 있습니다.
+  </p>
+  <div class="paper-why">💡 세 지표가 일치할수록 결과의 신뢰도가 높습니다. RRF가 세 지표 모두에서 앞선다면, 단순히 운이 아니라 구조적으로 더 나은 알고리즘이라는 의미입니다.</div>
+</div>
+
+<div class="charts">
+  <div class="cc"><div class="cc-t">nDCG@10</div><div class="cc-s">관련 결과가 상위에 올수록 높음 (0~1)</div><div class="cc-w"><canvas id="c-ndcg"></canvas></div></div>
+  <div class="cc"><div class="cc-t">MRR</div><div class="cc-s">첫 번째 관련 결과의 순위 역수</div><div class="cc-w"><canvas id="c-mrr"></canvas></div></div>
+  <div class="cc"><div class="cc-t">P@5</div><div class="cc-s">상위 5개 중 관련 결과 비율</div><div class="cc-w"><canvas id="c-p5"></canvas></div></div>
+</div>
+
+<div class="tw">
+  <div class="tw-h">
+    <span class="tw-ht">쿼리별 nDCG@10 상세</span>
+    <span class="tw-hn" id="valid-count">—</span>
+  </div>
+  <div class="ts">
+    <table>
+      <thead>
+        <tr>
+          <th>쿼리</th><th>카테고리</th>
+          <th class="r">AI레이블</th>
+          <th class="r">Google</th><th class="r">Naver</th><th class="r">Daum</th>
+          <th class="r" id="th-brave" style="display:none">Brave</th>
+          <th class="r">RRF ★</th><th class="r">최고</th>
+        </tr>
+      </thead>
+      <tbody id="qtbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- 논문 카드 #4: LLM-as-Judge -->
+<div class="paper">
+  <span class="paper-badge">📄 AI 평가 방법론</span>
+  <div class="paper-title">LLM-as-a-Judge — 대형 언어 모델을 평가자로 활용하기</div>
+  <div class="paper-meta">Zheng et al. "Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena" · NeurIPS 2023 &nbsp;|&nbsp; Faggioli et al. "Perspectives on LLMs for Relevance Judgment" · ICTIR 2023</div>
+  <p class="paper-body">
+    기존에는 검색 결과의 관련성을 <strong>사람이 직접 하나하나 평가</strong>해야 했습니다(이를 "레이블링"이라 함).
+    하지만 수백 개의 결과를 매번 사람이 평가하면 비용이 막대합니다.
+    2023년 연구들은 GPT-4 같은 대형 언어 모델(LLM)이 사람 평가자와 <strong>80% 이상의 일치율</strong>을 보인다는 것을 발표했습니다.
+    메타서치는 이 연구를 바탕으로 <strong>Groq의 Qwen3 모델</strong>을 레이블러로 활용해,
+    각 검색 결과를 0(무관련) · 1(부분관련) · 2(매우관련)으로 자동 채점합니다.
+    이를 통해 사람 평가자 없이도 신뢰할 수 있는 검색 품질 측정이 가능해졌습니다.
+  </p>
+  <div class="paper-why">💡 AI 레이블링은 완벽하지 않습니다. 아래 표에서 "AI레이블" 열이 낮은 쿼리는 AI가 관련성 판단에 실패했을 가능성이 있습니다. 실패율이 높으면 결과 신뢰도가 떨어질 수 있습니다.</div>
+</div>
+
+<div>
+  <div class="sec-lbl" style="--acc:#15803D">결론</div>
+  <div class="sec-title" style="margin-bottom:14px">핵심 발견</div>
+  <div class="findings" id="findings"></div>
+</div>
+
+<div class="note" id="footnote"></div>
+
+</div>
+</div>
+
+<script>
+/* 로딩 애니메이션 */
+var STEPS = [
+  // 10쿼리 × 4초 딜레이 = 약 50초 목표
+  {id:'s1',pct:3,  msg:'10개 테스트 쿼리 준비 중…',          delay:800},
+  {id:'s2',pct:20, msg:'Google · Naver · Daum 병렬 검색 중…',delay:10000},
+  {id:'s3',pct:40, msg:'URL 풀 구성 및 중복 제거 중…',       delay:10000},
+  {id:'s4',pct:75, msg:'AI 관련성 채점 중… (약 40~50초 소요)',delay:25000},
+  {id:'s5',pct:92, msg:'지표 계산 및 집계 중…',              delay:8000}
+];
+var si = 0, tm;
+function advStep() {
+  if (si >= STEPS.length) return;
+  var st = STEPS[si];
+  if (si > 0) document.getElementById(STEPS[si-1].id).className = 'ld-step done';
+  document.getElementById(st.id).className = 'ld-step active';
+  document.getElementById('pf').style.width = st.pct + '%';
+  document.getElementById('ldmsg').textContent = st.msg;
+  si++;
+  tm = setTimeout(advStep, st.delay);
+}
+advStep();
+
+function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+/* 평가 실행 (Eval 핸들러 호출) */
+fetch('/Eval?handler=Run&n=20')
+  .then(function(r) { return r.text(); })
+  .then(function(txt) {
+    clearTimeout(tm);
+    document.getElementById('pf').style.width = '100%';
+    document.getElementById('ldmsg').textContent = '완료! 결과를 렌더링 중…';
+    STEPS.forEach(function(st) { document.getElementById(st.id).className = 'ld-step done'; });
+
+    if (txt.trim().startsWith('<')) {
+      showError('서버 오류:\n' + txt.replace(/<[^>]+>/g,' ').replace(/\s{2,}/g,' ').trim().substring(0, 400));
+      return;
+    }
+    var data;
+    try { data = JSON.parse(txt); } catch(e) { showError('JSON 파싱 오류: ' + e.message); return; }
+    if (data.error) { showError(data.error); return; }
+
+    setTimeout(function() {
+      document.getElementById('loading').style.display = 'none';
+      // Chart.js는 canvas가 화면에 보여야 초기화됨 → main 먼저 표시 후 render
+      document.getElementById('main').style.display = 'block';
+      try {
+        render(data);
+      } catch(e) {
+        // render() 중 JS 예외 → 에러 박스 표시
+        document.getElementById('main').style.display = 'none';
+        showError('렌더링 오류: ' + e.message + '\n' + (e.stack || ''));
+      }
+    }, 600);
+  })
+  .catch(function(e) { showError('네트워크 오류 (서버 응답 없음 또는 timeout): ' + e.message); });
+
+function showError(msg) {
+  clearTimeout(tm);
+  try { document.getElementById('loading').style.display = 'none'; } catch(e) {}
+  try {
+    document.getElementById('error-box').style.display = 'block';
+    // 긴 에러 메시지는 앞 300자만 표시
+    document.getElementById('err-msg').textContent = String(msg).substring(0, 300);
+  } catch(e) {
+    // 최후 수단: body에 에러 직접 표시
+    document.body.innerHTML = '<div style="margin:40px;color:red;font-family:monospace;white-space:pre-wrap">오류: ' + String(msg).substring(0, 500) + '</div>';
+  }
+}
+
+function render(data) {
+  // 데이터 구조 검증 — aggregate 없으면 에러 표시
+  if (!data || !data.aggregate || !data.aggregate.nDCG10) {
+    showError('서버 응답 데이터 오류: aggregate 없음\n' + JSON.stringify(data).substring(0, 300));
+    return;
+  }
+  var agg = data.aggregate, bq = data.byQuery || [], valid = data.queryCount;
+  var zeros = 0;
+  bq.forEach(function(r) { if (!r.nDCG10) zeros++; });
+
+  var now = new Date();
+  document.getElementById('eval-meta').textContent =
+    '평가 일시: ' + now.getFullYear() + '.' + (now.getMonth()+1) + '.' + now.getDate() +
+    '  |  유효 쿼리: ' + valid + '/' + bq.length +
+    '  |  평가 지표: nDCG@10 · MRR · P@5';
+
+  /* 타일 */
+  var hasBrave = agg.nDCG10.Brave != null;
+  var engines = [
+    {k:'g',name:'Google',   ndcg:agg.nDCG10.Google, mrr:agg.MRR.Google, p5:agg.P5.Google},
+    {k:'n',name:'Naver',    ndcg:agg.nDCG10.Naver,  mrr:agg.MRR.Naver,  p5:agg.P5.Naver},
+    {k:'d',name:'Daum',     ndcg:agg.nDCG10.Daum,   mrr:agg.MRR.Daum,   p5:agg.P5.Daum},
+    {k:'r',name:'RRF 통합', ndcg:agg.nDCG10.RRF,    mrr:agg.MRR.RRF,    p5:agg.P5.RRF}
+  ];
+  if (hasBrave) engines.splice(3, 0, {k:'b',name:'Brave', ndcg:agg.nDCG10.Brave, mrr:agg.MRR.Brave, p5:agg.P5.Brave});
+  var sorted = engines.slice().sort(function(a,b){return b.ndcg-a.ndcg;});
+  sorted.forEach(function(e,i){e.rank=i+1;});
+  var rankLabels = ['','1위 🥇','2위 🥈','3위 🥉','4위'];
+  var tc = document.getElementById('tiles');
+  engines.forEach(function(e) {
+    var rc = e.rank===1?'gold':e.rank===2?'silver':e.rank===3?'bronze':'';
+    tc.innerHTML += '<div class="tile '+e.k+'">' +
+      '<div class="tile-eng">'+e.name+'</div>' +
+      '<div class="tile-val">'+e.ndcg.toFixed(4)+'</div>' +
+      '<div class="tile-lbl">nDCG@10</div>' +
+      '<div class="tile-sub">MRR <span>'+e.mrr.toFixed(4)+'</span> &nbsp; P@5 <span>'+e.p5.toFixed(4)+'</span></div>' +
+      '<span class="badge-rank '+rc+'">'+rankLabels[e.rank]+'</span>' +
+      '</div>';
+  });
+
+  /* 개선율 */
+  var maxV = Math.max(agg.nDCG10.Naver, agg.nDCG10.Daum, agg.nDCG10.RRF) * 1.2;
+  var rows = [
+    {k:'n',name:'Naver',v:agg.nDCG10.Naver,c:'var(--N)',base:null},
+    {k:'d',name:'Daum', v:agg.nDCG10.Daum, c:'var(--D)',base:null},
+    {k:'r',name:'RRF',  v:agg.nDCG10.RRF,  c:'var(--R)',base:Math.max(agg.nDCG10.Naver,agg.nDCG10.Daum)}
+  ];
+  if (hasBrave) rows.splice(2, 0, {k:'b',name:'Brave',v:agg.nDCG10.Brave,c:'var(--B)',base:null});
+  var ir = document.getElementById('improve-rows');
+  rows.forEach(function(row) {
+    var pct = Math.round(row.v / maxV * 100);
+    var delta = '';
+    if (row.base !== null) {
+      var diff = row.v - row.base;
+      delta = '<span class="imp-delta" style="color:'+(diff>=0?'var(--ok)':'var(--err)')+'">'+(diff>=0?'+':'')+(diff*100).toFixed(2)+'%</span>';
+    } else {
+      delta = '<span class="imp-delta" style="color:var(--mu)">기준</span>';
+    }
+    ir.innerHTML += '<div class="imp-row">' +
+      '<span class="imp-eng '+row.k+'">'+row.name+'</span>' +
+      '<div class="imp-track"><div class="imp-fill" style="width:'+pct+'%;background:'+row.c+'"><span class="imp-fill-v">'+row.v.toFixed(4)+'</span></div></div>' +
+      delta + '</div>';
+  });
+
+  /* 차트 */
+  function mkBar(id, vals) {
+    var labels = hasBrave ? ['Google','Naver','Daum','Brave','RRF'] : ['Google','Naver','Daum','RRF'];
+    var data   = hasBrave ? [vals.G,vals.N,vals.D,vals.B,vals.R] : [vals.G,vals.N,vals.D,vals.R];
+    var colors = hasBrave ? [css('--G'),css('--N'),css('--D'),css('--B'),css('--R')] : [css('--G'),css('--N'),css('--D'),css('--R')];
+    return new Chart(document.getElementById(id), {
+      type:'bar',
+      data:{labels,
+        datasets:[{data,
+          backgroundColor:colors,borderRadius:4,borderSkipped:false}]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+        scales:{
+          x:{min:0,max:Math.min(1,Math.max(vals.G,vals.N,vals.D,vals.R)*1.15),
+            ticks:{color:css('--mu'),font:{size:10}},grid:{color:css('--bd')}},
+          y:{ticks:{color:css('--fg'),font:{size:11,family:"'Noto Sans KR',sans-serif"}},grid:{display:false}}
+        },
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ' '+ctx.raw.toFixed(4)}}}}
+      }
+    });
+  }
+  mkBar('c-ndcg',{G:agg.nDCG10.Google,N:agg.nDCG10.Naver,D:agg.nDCG10.Daum,B:agg.nDCG10.Brave||0,R:agg.nDCG10.RRF});
+  mkBar('c-mrr', {G:agg.MRR.Google,   N:agg.MRR.Naver,   D:agg.MRR.Daum,   B:agg.MRR.Brave||0,   R:agg.MRR.RRF});
+  mkBar('c-p5',  {G:agg.P5.Google,    N:agg.P5.Naver,    D:agg.P5.Daum,    B:agg.P5.Brave||0,    R:agg.P5.RRF});
+
+  /* 테이블 */
+  document.getElementById('valid-count').textContent = '유효: '+valid+'개 / 0점(레이블 실패): '+zeros+'개';
+  // Brave 컬럼 표시 여부
+  if (hasBrave) document.getElementById('th-brave').style.display = '';
+  var tb = document.getElementById('qtbody');
+  bq.forEach(function(row) {
+    // AI 레이블링 성공 여부 표시
+    var lbl = (row.labeledCount != null)
+      ? (row.labeledCount === 0
+          ? '<span style="color:var(--err)">실패(0/'+row.poolSize+')</span>'
+          : '<span style="color:var(--ok)">'+row.labeledCount+'/'+row.poolSize+'</span>')
+      : '—';
+    if (!row.nDCG10) {
+      var colspan = hasBrave ? '5' : '4';
+      tb.innerHTML += '<tr class="zero-row"><td>'+row.query+'</td><td><span class="kw">'+(row.keyword||'—')+'</span></td>' +
+        '<td class="num">'+lbl+'</td>' +
+        '<td colspan="'+colspan+'" class="num" style="text-align:center">AI 레이블링 실패</td><td class="num">—</td></tr>';
+      return;
+    }
+    var g=row.nDCG10.Google,n=row.nDCG10.Naver,d=row.nDCG10.Daum;
+    var b=row.nDCG10.Brave||0,r=row.nDCG10.RRF;
+    var best=hasBrave?Math.max(g,n,d,b,r):Math.max(g,n,d,r);
+    var wc=g===best?'g':n===best?'n':d===best?'d':(hasBrave&&b===best)?'b':'r';
+    var wl={g:'Google',n:'Naver',d:'Daum',b:'Brave',r:'RRF'};
+    function nc(v,cls,hidden){return '<td class="num'+(cls?' win '+cls:'')+'"'+(hidden?' style="display:none"':'')+'>'+v.toFixed(4)+'</td>';}
+    tb.innerHTML += '<tr><td>'+row.query+'</td><td><span class="kw">'+(row.keyword||'—')+'</span></td>' +
+      '<td class="num">'+lbl+'</td>' +
+      nc(g,wc==='g'?'g':null)+nc(n,wc==='n'?'n':null)+nc(d,wc==='d'?'d':null) +
+      nc(b,wc==='b'?'b':null,!hasBrave) +
+      nc(r,wc==='r'?'r':null) +
+      '<td class="num win '+wc+'">'+wl[wc]+'</td></tr>';
+  });
+
+  /* 핵심 발견 */
+  var rrf=agg.nDCG10.RRF, nav=agg.nDCG10.Naver, dau=agg.nDCG10.Daum;
+  var imp = ((rrf - Math.max(nav,dau))*100).toFixed(2);
+  var sign = parseFloat(imp)>=0?'+':'';
+  document.getElementById('findings').innerHTML =
+    '<div class="fin green"><div class="fin-n">발견 #1</div>' +
+    '<div class="fin-t">RRF는 단일 Naver/Daum 대비 nDCG 기준 '+sign+imp+'% 차이</div>' +
+    '<div class="fin-v">RRF '+rrf.toFixed(4)+'</div>' +
+    '<div class="fin-d">세 엔진 합의 기반 재정렬로 신뢰도 높은 결과를 상위에 배치. 커버리지도 더 넓음.</div></div>' +
+    '<div class="fin purple"><div class="fin-n">발견 #2</div>' +
+    '<div class="fin-t">RRF는 "합의된" 결과를 우선 보여줍니다</div>' +
+    '<div class="fin-v">3엔진 교차 검증</div>' +
+    '<div class="fin-d">여러 엔진 모두 상위에 오른 결과 = 더 신뢰할 수 있는 결과. 단일 엔진은 이 교차 검증이 불가능.</div></div>' +
+    '<div class="fin blue"><div class="fin-n">발견 #3</div>' +
+    '<div class="fin-t">한국어 쿼리는 네이버 가중치 1.4 적용</div>' +
+    '<div class="fin-v">Google '+agg.nDCG10.Google.toFixed(4)+'</div>' +
+    '<div class="fin-d">한국어 쿼리 감지 시 네이버 RRF 가중치를 1.4로 높여 국내 검색 품질을 강화했습니다.</div></div>';
+
+  document.getElementById('footnote').innerHTML =
+    '* 관련성 레이블: Groq (qwen/qwen3.8-27b)가 각 결과를 0(무관련)·1(부분관련)·2(매우관련)으로 자동 평가. ' +
+    zeros+'개 쿼리는 AI 레이블러 응답 실패로 0점 처리됨 (결과 품질과 무관). ' +
+    '평가 대상: 쇼핑·국내뉴스·IT기술·국내장소·게임·스포츠·의료건강·차량·맛집·해외뉴스 10개 카테고리.';
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,354 @@
+﻿@inject Lang Lang
+@inject MemberDao MemberDao
+@inject Services.DbService Db
+@{
+    // 쿠키 → 세션 동기화 (다크모드)
+    bool isDark = false;
+    if (Context.Request.Cookies.ContainsKey("DarkMode"))
+    {
+        isDark = Context.Request.Cookies["DarkMode"] == "1";
+        Context.Session.SetString("IsDark", isDark.ToString());
+    }
+    else if (Context.Session.GetString("IsDark") != null)
+    {
+        isDark = Context.Session.GetString("IsDark") == "True";
+    }
+
+    // 쿠키 → 세션 동기화 (언어)
+    if (Context.Request.Cookies.ContainsKey("Language"))
+    {
+        string cookieLang = Context.Request.Cookies["Language"];
+        if (Context.Session.GetString("Lang") != cookieLang)
+            Context.Session.SetString("Lang", cookieLang);
+    }
+
+    // 쿠키 자동 로그인 (UserID 쿠키가 있지만 세션이 없는 경우)
+    string uid = Context.Session.GetString("UserID");
+    if (uid == null && Context.Request.Cookies.ContainsKey("UserID"))
+    {
+        uid = Context.Request.Cookies["UserID"];
+        Context.Session.SetString("UserID", uid);
+        string nick = MemberDao.GetNickname(uid);
+        Context.Session.SetString("UserName", nick);
+        var (dm, lg) = MemberDao.GetUserSettings(uid);
+        Context.Session.SetString("IsDark", dm.ToString());
+        Context.Session.SetString("Lang", lg);
+        isDark = dm;
+    }
+
+    // 알림 배지 (로그인 시만)
+    int unreadCount = 0;
+    if (uid != null)
+    {
+        try
+        {
+            using var conn = Db.OpenConnection();
+            unreadCount = Dapper.SqlMapper.QuerySingleOrDefault<int>(conn,
+                "SELECT COUNT(*) FROM notifications WHERE userid=@uid AND isread=false",
+                new { uid });
+        }
+        catch { }
+    }
+
+    string userName = Context.Session.GetString("UserName") ?? uid;
+}
+<!DOCTYPE html>
+<html lang="ko" class="@(isDark ? "dark" : "")">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" />
+    <title>@ViewData["Title"] - Meta Search</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%236D28D9'/%3E%3Ccircle cx='13' cy='12' r='6' fill='none' stroke='white' stroke-width='2.5'/%3E%3Cline x1='17.2' y1='16.2' x2='22' y2='21' stroke='white' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E" type="image/svg+xml" />
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide 아이콘 -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        // Tailwind 다크모드 설정
+        tailwind.config = { darkMode: 'class' }
+    </script>
+    <style>
+        /* ── 버튼 스프링 바운스 ── */
+        button:not(:disabled),
+        a.btn {
+            transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+                        box-shadow 0.18s ease,
+                        background-color 0.15s ease,
+                        color 0.15s ease,
+                        border-color 0.15s ease;
+        }
+        button:hover:not(:disabled) {
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.10);
+        }
+        button:active:not(:disabled) {
+            transform: translateY(1px) scale(0.97);
+            box-shadow: none;
+            transition-duration: 0.07s;
+        }
+
+        /* ── 카드(링크형) hover lift ── */
+        a[href]:not(nav a):not(.no-lift) {
+            transition: color 0.15s ease, transform 0.18s cubic-bezier(0.34,1.56,0.64,1);
+        }
+        tr:has(a[href]):hover td {
+            background-color: inherit;
+        }
+
+        /* ── 둥근 카드 컨테이너 hover shadow ── */
+        .card-hover {
+            transition: box-shadow 0.2s ease, transform 0.2s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 32px rgba(0,0,0,0.10);
+        }
+
+        /* ── input 포커스 글로우 ── */
+        input:focus, textarea:focus {
+            transition: box-shadow 0.2s ease, border-color 0.2s ease;
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+        }
+
+        /* ── 모달 페이드+스케일 인 ── */
+        @@keyframes modalIn {
+            from { opacity: 0; transform: scale(0.93) translateY(8px); }
+            to   { opacity: 1; transform: scale(1)    translateY(0); }
+        }
+        #loginModal > div,
+        #pwModal > div,
+        #deleteModal > div,
+        #withdrawModal > div {
+            animation: modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) both;
+        }
+        #loginModal.hidden > div,
+        #pwModal.hidden > div,
+        #deleteModal.hidden > div,
+        #withdrawModal.hidden > div {
+            animation: none;
+        }
+
+        /* ── 토스트 슬라이드 인 ── */
+        @@keyframes toastIn {
+            from { opacity: 0; transform: translateX(60px); }
+            to   { opacity: 1; transform: translateX(0); }
+        }
+        #toastBox {
+            animation: toastIn 0.25s cubic-bezier(0.34,1.56,0.64,1) both;
+        }
+
+        /* ── 페이지 콘텐츠 페이드인 ── */
+        @@keyframes fadeUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        body > *:not(nav) {
+            animation: fadeUp 0.25s ease both;
+        }
+
+        /* ── 네비 링크 밑줄 슬라이드 ── */
+        nav a {
+            position: relative;
+        }
+        nav a::after {
+            content: '';
+            position: absolute;
+            left: 0; bottom: -2px;
+            width: 0; height: 2px;
+            background: #3b82f6;
+            transition: width 0.2s ease;
+            border-radius: 1px;
+        }
+        nav a:hover::after { width: 100%; }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-slate-900 transition-colors duration-300">
+
+    <!-- 상단 네비게이션 바 -->
+    <nav class="h-16 border-b dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-50 px-4">
+        <div class="max-w-7xl mx-auto h-full flex items-center justify-between">
+            <!-- 로고 -->
+            <a href="/" class="flex items-center">
+                <svg height="52" viewBox="0 0 400 120" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#3b82f6"/>
+                            <stop offset="50%" style="stop-color:#8b5cf6"/>
+                            <stop offset="100%" style="stop-color:#ec4899"/>
+                        </linearGradient>
+                        <linearGradient id="g2" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#60a5fa"/>
+                            <stop offset="100%" style="stop-color:#c084fc"/>
+                        </linearGradient>
+                    </defs>
+                    <circle cx="52" cy="52" r="34" fill="none" stroke="url(#g1)" stroke-width="5"/>
+                    <line x1="78" y1="78" x2="104" y2="104" stroke="url(#g1)" stroke-width="5" stroke-linecap="round"/>
+                    <polyline points="34,70 34,34 52,56 70,34 70,70" fill="none" stroke="url(#g2)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <text x="124" y="60" font-family="Arial, sans-serif" font-size="46" font-weight="900" fill="url(#g1)" letter-spacing="-1">Meta</text>
+                    <text x="127" y="95" font-family="Arial, sans-serif" font-size="20" font-weight="400" fill="#8b5cf6" letter-spacing="8">SEARCH</text>
+                    <line x1="127" y1="103" x2="390" y2="103" stroke="url(#g1)" stroke-width="1.2" stroke-linecap="round"/>
+                </svg>
+            </a>
+
+            <!-- 우측 내비게이션 -->
+            <div class="flex items-center gap-3 sm:gap-6 text-xs font-bold dark:text-slate-300">
+                <a href="/Community" class="hover:text-blue-500">@Lang.Get("nav.community")</a>
+                <a href="/Settings" class="hover:text-blue-500">@Lang.Get("nav.settings")</a>
+
+                @if (uid != null)
+                {
+                    // 알림 벨 아이콘
+                    <div class="relative" id="notifWrap">
+                        <button type="button" onclick="toggleNotif(event)" class="relative p-1 hover:text-blue-500 transition-colors">
+                            <i data-lucide="bell" class="w-4 h-4"></i>
+                            @if (unreadCount > 0)
+                            {
+                                <span class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold pointer-events-none">
+                                    @(unreadCount > 9 ? "9+" : unreadCount.ToString())
+                                </span>
+                            }
+                        </button>
+                        <!-- 알림 드롭다운 -->
+                        <div id="notifDrop" class="hidden absolute right-0 top-8 w-80 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border dark:border-slate-700 z-[200] overflow-hidden">
+                            <div class="p-4 border-b dark:border-slate-700 flex justify-between items-center">
+                                <span class="font-bold dark:text-white text-sm">@Lang.Get("notif.title")</span>
+                                <button type="button" onclick="markAllRead()" class="text-xs text-blue-500 hover:underline">@Lang.Get("notif.markRead")</button>
+                            </div>
+                            <div id="notifList" class="max-h-72 overflow-y-auto">
+                                <p class="p-6 text-center text-gray-400 text-sm">...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    // 닉네임 + 인사말
+                    <span class="font-bold dark:text-slate-300">@userName@Lang.Get("nav.greeting")</span>
+
+                    // 로그아웃 버튼
+                    <a href="/Logout" class="text-red-500">@Lang.Get("nav.logout")</a>
+                }
+                else
+                {
+                    // 로그인 버튼
+                    <button type="button" onclick="openLogin()" class="px-4 py-2 bg-black dark:bg-blue-600 text-white rounded-full text-xs font-bold">@Lang.Get("nav.login")</button>
+                }
+            </div>
+        </div>
+    </nav>
+
+    <!-- 로그인 모달 -->
+    <div id="loginModal" class="hidden fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-800 p-8 rounded-2xl w-full max-w-sm shadow-2xl text-center">
+            <h2 class="text-2xl font-bold mb-6 dark:text-white">@Lang.Get("login.title")</h2>
+            <form method="post" asp-page="/Login" class="space-y-4 text-left">
+                <input name="LoginId" type="text" placeholder="@Lang.Get("login.id")"
+                       class="w-full p-3 border rounded-xl dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                <input name="LoginPw" type="password" placeholder="@Lang.Get("login.pw")"
+                       class="w-full p-3 border rounded-xl dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                <button type="submit" class="w-full py-3 bg-blue-600 text-white rounded-xl font-bold cursor-pointer">@Lang.Get("login.btn")</button>
+                <div class="text-center text-sm text-gray-500 mt-4">
+                    @Lang.Get("login.noAccount")
+                    <a href="/Register" class="text-blue-600 font-bold hover:underline">@Lang.Get("login.register")</a>
+                </div>
+                <button type="button" onclick="closeLogin()" class="w-full text-gray-400 text-xs mt-2">@Lang.Get("login.close")</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 토스트 알림 (TempData["ToastMsg"] / TempData["ToastType"]) -->
+    @if (TempData["ToastMsg"] != null)
+    {
+        var toastType = TempData["ToastType"]?.ToString() ?? "info";
+        var toastColor = toastType == "success" ? "bg-green-500" : toastType == "error" ? "bg-red-500" : "bg-blue-500";
+        <div id="toastBox" class="fixed bottom-6 right-6 z-[200] flex items-center gap-3 px-5 py-3 rounded-xl text-white text-sm font-medium shadow-xl @toastColor transition-all duration-300">
+            <span>@TempData["ToastMsg"]</span>
+            <button onclick="this.parentElement.remove()" class="ml-2 text-white/70 hover:text-white text-lg leading-none">×</button>
+        </div>
+        <script>
+            // 3초 후 토스트 자동 제거
+            setTimeout(function(){ var t=document.getElementById('toastBox'); if(t) t.remove(); }, 3000);
+        </script>
+    }
+
+    <!-- 메인 콘텐츠 -->
+    @RenderBody()
+
+    <!-- 공통 JavaScript -->
+    <script>
+        // 알림 다국어 메시지
+        var _noNotifMsg  = '@Html.Raw(Lang.Get("notif.noNotif"))';
+        var _commentMsg  = '@Html.Raw(Lang.Get("notif.comment"))';
+        var _likeMsg     = '@Html.Raw(Lang.Get("notif.like"))';
+
+        // Lucide 아이콘 초기화
+        lucide.createIcons();
+
+        // 로그인 모달
+        function openLogin() { document.getElementById('loginModal').classList.remove('hidden'); }
+        function closeLogin() { document.getElementById('loginModal').classList.add('hidden'); }
+
+        // 알림 기능
+        function toggleNotif(e) {
+            e.stopPropagation();
+            var d = document.getElementById('notifDrop');
+            d.classList.toggle('hidden');
+            if (!d.classList.contains('hidden')) loadNotifs();
+        }
+        function loadNotifs() {
+            fetch('/api/notify?action=getList')
+                .then(function(r){ return r.json(); })
+                .then(function(list){
+                    var el = document.getElementById('notifList');
+                    if (!list || list.length === 0) {
+                        el.innerHTML = '<p class="p-6 text-center text-gray-400 dark:text-slate-500 text-sm">' + _noNotifMsg + '</p>';
+                        return;
+                    }
+                    el.innerHTML = list.map(function(n){
+                        var color = n.type === 'comment' ? 'blue' : 'pink';
+                        var bg    = n.isRead ? '' : 'bg-blue-50 dark:bg-blue-950/20';
+                        var msg   = n.type === 'comment' ? _commentMsg : _likeMsg;
+                        var actor = n.actorNick ? n.actorNick + ' ' : '';
+                        return '<div data-notif="' + n.notifID + '" class="relative flex items-center border-b dark:border-slate-700 last:border-0 ' + bg + '">'
+                            + '<a href="/CommunityView?no=' + n.bbsNo + '" onclick="markOneRead(' + n.notifID + ')" class="flex items-start gap-3 p-4 flex-1 min-w-0 hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors">'
+                            + '<div class="w-8 h-8 rounded-full bg-' + color + '-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5">' + (n.actorNick ? n.actorNick.charAt(0) : '?') + '</div>'
+                            + '<div class="min-w-0"><p class="text-xs dark:text-slate-300 leading-relaxed">' + actor + msg + '</p>'
+                            + '<p class="text-xs text-gray-400 dark:text-slate-500 mt-0.5 truncate">' + n.bbsTitle + '</p></div>'
+                            + '</a>'
+                            + '<button type="button" onclick="deleteNotif(' + n.notifID + ', this)" class="flex-shrink-0 px-3 text-gray-400 hover:text-red-500 text-lg leading-none transition-colors self-stretch flex items-center" title="삭제">×</button>'
+                            + '</div>';
+                    }).join('');
+                });
+        }
+        function markOneRead(notifID) {
+            fetch('/api/notify?action=markOne&notifID=' + notifID);
+            var item = document.querySelector('[data-notif="' + notifID + '"]');
+            if (item) { item.classList.remove('bg-blue-50'); item.classList.remove('dark:bg-blue-950/20'); }
+            var badge = document.querySelector('#notifWrap .absolute.-top-1');
+            if (badge) badge.style.display = 'none';
+        }
+        function deleteNotif(notifID, btn) {
+            fetch('/api/notify?action=delete&notifID=' + notifID).then(function(){
+                var item = btn.closest ? btn.closest('[data-notif]') : btn.parentNode;
+                if (item && item.parentNode) {
+                    item.parentNode.removeChild(item);
+                    var el = document.getElementById('notifList');
+                    if (el && el.querySelectorAll('[data-notif]').length === 0)
+                        el.innerHTML = '<p class="p-6 text-center text-gray-400 dark:text-slate-500 text-sm">' + _noNotifMsg + '</p>';
+                }
+            });
+        }
+        function markAllRead() {
+            fetch('/api/notify?action=markRead').then(function(){
+                document.getElementById('notifDrop').classList.add('hidden');
+                var badge = document.querySelector('#notifWrap .absolute.-top-1');
+                if (badge) badge.style.display = 'none';
+            });
+        }
+        document.addEventListener('click', function(e) {
+            var w = document.getElementById('notifWrap');
+            var d = document.getElementById('notifDrop');
+            if (w && d && !w.contains(e.target)) d.classList.add('hidden');
+        });
+    </script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

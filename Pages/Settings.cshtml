@@ -1,0 +1,266 @@
+@page
+@model SettingsModel
+@{
+    ViewData["Title"] = "설정";
+}
+
+<div class="max-w-4xl mx-auto px-6 py-12 min-h-screen">
+    <h2 class="text-2xl font-bold mb-8 dark:text-white">@Model.Lang.Get("set.title")</h2>
+
+    <!-- 탭 전환 -->
+    <div class="flex gap-2 mb-8">
+        <button onclick="switchTab('general')" id="tabGeneral" class="px-6 py-2 rounded-xl text-sm font-bold transition-all bg-blue-600 text-white">@Model.Lang.Get("set.general")</button>
+        <button onclick="switchTab('privacy')" id="tabPrivacy" class="px-6 py-2 rounded-xl text-sm font-bold transition-all bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300">@Model.Lang.Get("set.privacy")</button>
+    </div>
+
+    <!-- ===== 일반 탭 ===== -->
+    <div id="panelGeneral">
+        <!-- 테마 토글 -->
+        <div class="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl p-6 mb-4 flex items-center justify-between">
+            <div>
+                <p class="font-bold dark:text-white">@Model.Lang.Get("set.theme")</p>
+                <p class="text-sm text-gray-500 dark:text-slate-400">@Model.Lang.Get("set.themeDesc")</p>
+            </div>
+            <button onclick="toggleDark()" class="w-14 h-8 rounded-full relative transition-colors @(Model.IsDark ? "bg-blue-600" : "bg-gray-300")">
+                <div class="w-6 h-6 bg-white rounded-full absolute top-1 transition-all @(Model.IsDark ? "left-7" : "left-1")"></div>
+            </button>
+        </div>
+
+        <!-- 언어 선택 -->
+        <div class="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl p-6 mb-4">
+            <p class="font-bold dark:text-white mb-3">@Model.Lang.Get("set.language")</p>
+            <div class="flex gap-3">
+                <button onclick="setLang('ko')" class="px-6 py-2 rounded-xl text-sm font-bold transition-all @(Model.CurrentLang == "ko" ? "bg-blue-600 text-white" : "bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300")">한국어</button>
+                <button onclick="setLang('en')" class="px-6 py-2 rounded-xl text-sm font-bold transition-all @(Model.CurrentLang == "en" ? "bg-blue-600 text-white" : "bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300")">English</button>
+            </div>
+        </div>
+
+        <!-- 프로필 수정 -->
+        <div class="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl p-6 mb-4">
+            <p class="font-bold dark:text-white mb-4">@Model.Lang.Get("set.profile")</p>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs text-gray-500 dark:text-slate-400 mb-1">@Model.Lang.Get("set.name")</label>
+                    <input type="text" id="editName" value="@Model.UserName"
+                           class="w-full px-4 py-2 border dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 dark:text-white text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 dark:text-slate-400 mb-1">@Model.Lang.Get("set.nick")</label>
+                    <input type="text" id="editNick" value="@Model.UserNick"
+                           class="w-full px-4 py-2 border dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 dark:text-white text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 dark:text-slate-400 mb-1">@Model.Lang.Get("set.email")</label>
+                    <input type="text" id="editEmail" value="@Model.UserEmail"
+                           class="w-full px-4 py-2 border dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 dark:text-white text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div class="flex gap-3 pt-2">
+                    <button onclick="updateProfile()" class="px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all cursor-pointer">@Model.Lang.Get("set.save")</button>
+                    <button onclick="openPwModal()" class="px-6 py-2 bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300 rounded-xl text-sm font-bold hover:bg-gray-200 dark:hover:bg-slate-600 transition-all cursor-pointer">@Model.Lang.Get("set.changePw")</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== 개인정보 탭 ===== -->
+    <div id="panelPrivacy" class="hidden">
+        <!-- 검색 통계 -->
+        <div class="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl p-6 mb-4">
+            <p class="font-bold dark:text-white mb-4">@Model.Lang.Get("set.stats")</p>
+            <div class="grid grid-cols-2 gap-4">
+                <div class="bg-gray-50 dark:bg-slate-700/50 rounded-xl p-4 text-center">
+                    <p class="text-2xl font-bold text-blue-600">@Model.TotalSearches</p>
+                    <p class="text-xs text-gray-500 dark:text-slate-400">@Model.Lang.Get("set.totalSearch")</p>
+                </div>
+                <div class="bg-gray-50 dark:bg-slate-700/50 rounded-xl p-4 text-center">
+                    <p class="text-2xl font-bold text-purple-600">@Model.TopKeyword</p>
+                    <p class="text-xs text-gray-500 dark:text-slate-400">@Model.Lang.Get("set.topKeyword")</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 엔진 점수 게이지 -->
+        <div class="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl p-6 mb-4">
+            <div class="flex justify-between items-center mb-4">
+                <p class="font-bold dark:text-white">@Model.Lang.Get("set.engineScore")</p>
+                <button onclick="resetScores()" class="text-xs text-red-500 hover:underline cursor-pointer">@Model.Lang.Get("set.resetScores")</button>
+            </div>
+            @foreach (var eng in new[] { ("Google", Model.GooglePct, "blue"), ("Naver", Model.NaverPct, "green"), ("Daum", Model.DaumPct, "yellow") })
+            {
+                <div class="mb-3">
+                    <div class="flex justify-between text-sm mb-1">
+                        <span class="font-bold dark:text-slate-300">@eng.Item1</span>
+                        <span class="text-gray-500 dark:text-slate-400">@eng.Item2.ToString("F1")%</span>
+                    </div>
+                    <div class="w-full h-3 bg-gray-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                        <div class="h-full bg-@(eng.Item3)-500 rounded-full transition-all" style="width:@(eng.Item2)%"></div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- 최근 검색어 -->
+        <div class="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl p-6 mb-4">
+            <p class="font-bold dark:text-white mb-3">@Model.Lang.Get("set.recentSearch")</p>
+            @if (Model.RecentSearches.Count == 0)
+            {
+                <p class="text-sm text-gray-400 dark:text-slate-500">@Model.Lang.Get("set.noSearch")</p>
+            }
+            else
+            {
+                <div class="flex flex-wrap gap-2">
+                    @foreach (var s in Model.RecentSearches)
+                    {
+                        <span class="px-3 py-1.5 bg-gray-100 dark:bg-slate-700 text-sm rounded-full dark:text-slate-300">@s.query</span>
+                    }
+                </div>
+            }
+            <div class="mt-4 flex gap-2">
+                <button onclick="openDeleteModal()" class="text-xs text-red-500 hover:underline cursor-pointer">@Model.Lang.Get("set.deleteHistory")</button>
+            </div>
+        </div>
+
+        <!-- 내 게시글 -->
+        <div class="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl p-6 mb-4">
+            <p class="font-bold dark:text-white mb-3">@Model.Lang.Get("set.myPosts")</p>
+            @if (Model.MyPosts.Count == 0)
+            {
+                <p class="text-sm text-gray-400 dark:text-slate-500">@Model.Lang.Get("set.noPosts")</p>
+            }
+            else
+            {
+                @foreach (var p in Model.MyPosts)
+                {
+                    <a href="/CommunityView?no=@p.no" class="flex justify-between py-2 border-b dark:border-slate-700 last:border-0 text-sm hover:text-blue-500 transition-colors">
+                        <span class="dark:text-slate-300 truncate">@p.title</span>
+                        <span class="text-gray-400 dark:text-slate-500 flex-shrink-0 ml-4">@(p.uploadtime != null ? ((DateTime)p.uploadtime).ToString("yyyy.MM.dd") : "")</span>
+                    </a>
+                }
+            }
+        </div>
+
+        <!-- 회원 탈퇴 -->
+        <div class="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl p-6">
+            <p class="font-bold text-red-500 mb-2">@Model.Lang.Get("set.withdraw")</p>
+            <p class="text-xs text-gray-500 dark:text-slate-400 mb-4">@Model.Lang.Get("set.withdrawDesc")</p>
+            <button onclick="openWithdrawModal()" class="px-6 py-2 bg-red-500 text-white rounded-xl text-sm font-bold hover:bg-red-600 transition-all cursor-pointer">@Model.Lang.Get("set.withdrawBtn")</button>
+        </div>
+    </div>
+</div>
+
+<!-- 비밀번호 변경 모달 -->
+<div id="pwModal" class="hidden fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 p-8 rounded-2xl w-full max-w-sm shadow-2xl">
+        <h3 class="text-xl font-bold mb-4 dark:text-white">@Model.Lang.Get("set.changePw")</h3>
+        <div class="space-y-3">
+            <input type="password" id="oldPw" placeholder="@Model.Lang.Get("set.oldPw")" class="w-full p-3 border dark:border-slate-600 rounded-xl dark:bg-slate-700 dark:text-white" />
+            <input type="password" id="newPw" placeholder="@Model.Lang.Get("set.newPw")" class="w-full p-3 border dark:border-slate-600 rounded-xl dark:bg-slate-700 dark:text-white" />
+            <div class="flex gap-3">
+                <button onclick="changePw()" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold cursor-pointer">@Model.Lang.Get("set.confirm")</button>
+                <button onclick="closePwModal()" class="flex-1 py-3 bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300 rounded-xl font-bold cursor-pointer">@Model.Lang.Get("set.cancel")</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 검색 기록 삭제 모달 -->
+<div id="deleteModal" class="hidden fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 p-8 rounded-2xl w-full max-w-sm shadow-2xl">
+        <h3 class="text-xl font-bold mb-4 dark:text-white">@Model.Lang.Get("set.deleteHistory")</h3>
+        <div class="space-y-2">
+            @foreach (var opt in new[] { ("1h", "1시간"), ("12h", "12시간"), ("1d", "1일"), ("7d", "7일"), ("30d", "30일"), ("all", "전체") })
+            {
+                <button onclick="deleteHistory('@opt.Item1')" class="w-full py-3 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300 rounded-xl text-sm font-bold hover:bg-red-50 dark:hover:bg-red-950 hover:text-red-600 transition-all cursor-pointer">@opt.Item2</button>
+            }
+            <button onclick="closeDeleteModal()" class="w-full py-3 text-gray-400 text-sm cursor-pointer">@Model.Lang.Get("set.cancel")</button>
+        </div>
+    </div>
+</div>
+
+<!-- 탈퇴 확인 모달 -->
+<div id="withdrawModal" class="hidden fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 p-8 rounded-2xl w-full max-w-sm shadow-2xl text-center">
+        <h3 class="text-xl font-bold mb-4 text-red-500">@Model.Lang.Get("set.withdrawConfirm")</h3>
+        <p class="text-sm text-gray-500 dark:text-slate-400 mb-6">@Model.Lang.Get("set.withdrawWarn")</p>
+        <div class="flex gap-3">
+            <button onclick="doWithdraw()" class="flex-1 py-3 bg-red-500 text-white rounded-xl font-bold cursor-pointer">@Model.Lang.Get("set.withdrawBtn")</button>
+            <button onclick="closeWithdrawModal()" class="flex-1 py-3 bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300 rounded-xl font-bold cursor-pointer">@Model.Lang.Get("set.cancel")</button>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    // 탭 전환
+    function switchTab(tab) {
+        if (tab === 'general') {
+            document.getElementById('panelGeneral').classList.remove('hidden');
+            document.getElementById('panelPrivacy').classList.add('hidden');
+            document.getElementById('tabGeneral').className = 'px-6 py-2 rounded-xl text-sm font-bold transition-all bg-blue-600 text-white';
+            document.getElementById('tabPrivacy').className = 'px-6 py-2 rounded-xl text-sm font-bold transition-all bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300';
+        } else {
+            document.getElementById('panelGeneral').classList.add('hidden');
+            document.getElementById('panelPrivacy').classList.remove('hidden');
+            document.getElementById('tabPrivacy').className = 'px-6 py-2 rounded-xl text-sm font-bold transition-all bg-blue-600 text-white';
+            document.getElementById('tabGeneral').className = 'px-6 py-2 rounded-xl text-sm font-bold transition-all bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300';
+        }
+    }
+
+    // 다크모드 토글
+    function toggleDark() {
+        fetch('/Settings?handler=ToggleDark').then(function(r){ return r.json(); }).then(function(){
+            location.reload();
+        });
+    }
+
+    // 언어 변경
+    function setLang(lang) {
+        fetch('/Settings?handler=SetLang&lang=' + lang).then(function(){ location.reload(); });
+    }
+
+    // 프로필 저장
+    function updateProfile() {
+        var n = document.getElementById('editName').value;
+        var k = document.getElementById('editNick').value;
+        var e = document.getElementById('editEmail').value;
+        fetch('/Settings?handler=UpdateProfile&name=' + encodeURIComponent(n) + '&nick=' + encodeURIComponent(k) + '&email=' + encodeURIComponent(e))
+            .then(function(){ location.reload(); });
+    }
+
+    // 비밀번호 변경
+    function openPwModal() { document.getElementById('pwModal').classList.remove('hidden'); }
+    function closePwModal() { document.getElementById('pwModal').classList.add('hidden'); }
+    function changePw() {
+        var o = document.getElementById('oldPw').value;
+        var n = document.getElementById('newPw').value;
+        if (!o || !n) return;
+        fetch('/Settings?handler=ChangePw&oldPw=' + encodeURIComponent(o) + '&newPw=' + encodeURIComponent(n))
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if (d.result === 'ok') { alert('@Html.Raw(Model.Lang.Get("set.pwChanged"))'); closePwModal(); }
+                else alert('@Html.Raw(Model.Lang.Get("set.wrongPw"))');
+            });
+    }
+
+    // 검색 기록 삭제
+    function openDeleteModal() { document.getElementById('deleteModal').classList.remove('hidden'); }
+    function closeDeleteModal() { document.getElementById('deleteModal').classList.add('hidden'); }
+    function deleteHistory(period) {
+        fetch('/Settings?handler=DeleteHistory&period=' + period)
+            .then(function(){ location.reload(); });
+    }
+
+    // 엔진 점수 초기화
+    function resetScores() {
+        if (!confirm('@Html.Raw(Model.Lang.Get("set.resetConfirm"))')) return;
+        fetch('/Settings?handler=ResetScores').then(function(){ location.reload(); });
+    }
+
+    // 회원 탈퇴
+    function openWithdrawModal() { document.getElementById('withdrawModal').classList.remove('hidden'); }
+    function closeWithdrawModal() { document.getElementById('withdrawModal').classList.add('hidden'); }
+    function doWithdraw() {
+        fetch('/Settings?handler=Withdraw').then(function(){ window.location.href = '/'; });
+    }
+</script>
+}

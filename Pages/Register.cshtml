@@ -1,0 +1,63 @@
+@page
+@model RegisterModel
+@{
+    ViewData["Title"] = "회원가입";
+}
+
+<!-- 회원가입 폼 -->
+<div class="flex items-center justify-center min-h-[80vh] px-4">
+    <div class="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-3xl p-8 shadow-sm w-full max-w-md">
+
+        <h2 class="text-2xl font-bold mb-8 text-center text-gray-900 dark:text-white">@Model.Lang.Get("reg.title")</h2>
+
+        <!-- 서버 오류 메시지 표시 -->
+        @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+        {
+            <div class="mb-4 p-3 bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 text-sm rounded-xl text-center">
+                @Model.ErrorMessage
+            </div>
+        }
+
+        <form method="post" class="space-y-4">
+            <!-- 아이디 -->
+            <div>
+                <label class="block text-sm font-semibold mb-1 ml-1 text-gray-700 dark:text-gray-300">@Model.Lang.Get("reg.id")</label>
+                <input name="Userid" type="text" value="@Model.Input.Userid" required
+                       class="w-full px-4 py-3 border border-gray-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 dark:text-white" />
+            </div>
+            <!-- 비밀번호 -->
+            <div>
+                <label class="block text-sm font-semibold mb-1 ml-1 text-gray-700 dark:text-gray-300">@Model.Lang.Get("reg.pw")</label>
+                <input name="Passwd" type="password" required
+                       class="w-full px-4 py-3 border border-gray-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 dark:text-white" />
+            </div>
+            <!-- 이름 -->
+            <div>
+                <label class="block text-sm font-semibold mb-1 ml-1 text-gray-700 dark:text-gray-300">@Model.Lang.Get("reg.name")</label>
+                <input name="Name" type="text" value="@Model.Input.Name" required
+                       class="w-full px-4 py-3 border border-gray-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 dark:text-white" />
+            </div>
+            <!-- 닉네임 -->
+            <div>
+                <label class="block text-sm font-semibold mb-1 ml-1 text-gray-700 dark:text-gray-300">@Model.Lang.Get("reg.nick")</label>
+                <input name="Nickname" type="text" value="@Model.Input.Nickname" required
+                       class="w-full px-4 py-3 border border-gray-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 dark:text-white" />
+            </div>
+            <!-- 이메일 -->
+            <div>
+                <label class="block text-sm font-semibold mb-1 ml-1 text-gray-700 dark:text-gray-300">@Model.Lang.Get("reg.email")</label>
+                <input name="Email" type="email" value="@Model.Input.Email"
+                       class="w-full px-4 py-3 border border-gray-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 dark:text-white" />
+            </div>
+            <!-- 버튼 영역 -->
+            <div class="flex gap-3 pt-4">
+                <a href="/" class="flex-1 py-3 bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300 rounded-xl font-bold text-center hover:bg-gray-200 dark:hover:bg-slate-600 transition-all">
+                    @Model.Lang.Get("reg.cancel")
+                </a>
+                <button type="submit" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold cursor-pointer hover:bg-blue-700 transition-all">
+                    @Model.Lang.Get("reg.submit")
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
