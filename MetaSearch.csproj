@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <!-- .NET 8 타겟, 라즈베리파이 linux-arm64 배포용 -->
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- PostgreSQL 드라이버 (라즈베리파이 배포용) -->
+    <PackageReference Include="Npgsql" Version="8.0.5" />
+    <!-- Dapper ORM (경량 마이크로 ORM) -->
+    <PackageReference Include="Dapper" Version="2.1.35" />
+  </ItemGroup>
+
+</Project>
