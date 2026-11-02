@@ -15,41 +15,61 @@ public class MemberDao
 
     public MemberDao(DbService db) => _db = db;
 
-    /// <summary>아이디·비밀번호 검증 (MD5 해시 비교, 활성 계정만 허용)</summary>
+    /// <summary>아이디·비밀번호 검증 — BCrypt 우선, MD5 폴백 + 자동 마이그레이션</summary>
     public bool Authenticate(string id, string pw)
     {
-        string hash = GetMD5(pw);
+        id = id.Trim().ToLowerInvariant();
         using var conn = _db.OpenConnection();
-        // PostgreSQL VARCHAR는 공백 패딩 없음 — TRIM 불필요하지만 호환성 유지
-        var uid = conn.QueryFirstOrDefault<string>(
-            "SELECT userid FROM members WHERE userid = @id AND passwd = @hash AND (TRIM(status) = 'true' OR TRIM(status) = '1')",
-            new { id, hash });
-        return uid != null;
+        var stored = conn.QueryFirstOrDefault<string>(
+            "SELECT passwd FROM members WHERE LOWER(userid) = @id AND (TRIM(status) = 'true' OR TRIM(status) = '1')",
+            new { id });
+        if (stored == null) return false;
+
+        stored = stored.Trim();
+
+        // BCrypt 해시인지 확인 ($2a$, $2b$, $2y$ 접두사)
+        if (stored.StartsWith("$2"))
+        {
+            return BCrypt.Net.BCrypt.Verify(pw, stored);
+        }
+
+        // MD5 레거시 — 검증 후 BCrypt로 자동 마이그레이션
+        string md5Hash = GetMD5(pw);
+        if (!string.Equals(stored, md5Hash, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // MD5 인증 성공 → BCrypt 재해시 저장 (점진적 전환)
+        string bcryptHash = BCrypt.Net.BCrypt.HashPassword(pw, workFactor: 11);
+        conn.Execute("UPDATE members SET passwd = @bcryptHash WHERE userid = @id",
+            new { bcryptHash, id });
+        return true;
     }
 
-    /// <summary>아이디 중복 확인 (사용 가능하면 true)</summary>
+    /// <summary>아이디 중복 확인 (사용 가능하면 true, 소문자 정규화 + LOWER 쿼리)</summary>
     public bool VerifyUserID(string id)
     {
+        id = id.Trim().ToLowerInvariant();
         using var conn = _db.OpenConnection();
         var uid = conn.QueryFirstOrDefault<string>(
-            "SELECT userid FROM members WHERE userid = @id", new { id });
+            "SELECT userid FROM members WHERE LOWER(userid) = @id", new { id });
         return uid == null;
     }
 
-    /// <summary>회원가입</summary>
+    /// <summary>회원가입 — 아이디 소문자 정규화 후 중복 검사·저장</summary>
     public int RegisterUser(MemberDo m)
     {
+        m.Userid = m.Userid.Trim().ToLowerInvariant();
         using var conn = _db.OpenConnection();
         var exists = conn.QueryFirstOrDefault<string>(
-            "SELECT userid FROM members WHERE userid = @Userid", new { m.Userid });
+            "SELECT userid FROM members WHERE LOWER(userid) = @uid", new { uid = m.Userid });
         if (exists != null) return -1;
 
         conn.Execute(
             @"INSERT INTO members (userid, passwd, name, nickname, email, status, ugrade,
-              darkmode, language, googlescore, naverscore, daumscore)
+              darkmode, language, googlescore, naverscore, daumscore, bravescore)
               VALUES (@Userid, @Passwd, @Name, @Nickname, @Email, 'true', 1,
-              false, 'ko', 0, 0, 0)",
-            new { m.Userid, Passwd = GetMD5(m.Passwd), m.Name, m.Nickname, m.Email });
+              false, 'ko', 0, 0, 0, 0)",
+            new { m.Userid, Passwd = BCrypt.Net.BCrypt.HashPassword(m.Passwd, workFactor: 11), m.Name, m.Nickname, m.Email });
         return 1;
     }
 
@@ -121,54 +141,62 @@ public class MemberDao
             new { userID, top });
     }
 
-    /// <summary>엔진별 누적 점수 조회</summary>
-    public (double g, double n, double d) GetEngineScores(string userId)
+    /// <summary>엔진별 누적 점수 조회 (4엔진: Google·Naver·Daum·Brave)</summary>
+    public (double g, double n, double d, double b) GetEngineScores(string userId)
     {
         using var conn = _db.OpenConnection();
         var row = conn.QueryFirstOrDefault(
-            "SELECT googlescore, naverscore, daumscore FROM members WHERE userid = @userId",
+            "SELECT googlescore, naverscore, daumscore, COALESCE(bravescore, 0) AS bravescore FROM members WHERE userid = @userId",
             new { userId });
-        if (row == null) return (0, 0, 0);
+        if (row == null) return (0, 0, 0, 0);
         double g = Convert.ToDouble(row.googlescore ?? 0);
         double n = Convert.ToDouble(row.naverscore ?? 0);
         double d = Convert.ToDouble(row.daumscore ?? 0);
-        return (g, n, d);
+        double b = Convert.ToDouble(row.bravescore ?? 0);
+        return (g, n, d, b);
     }
 
-    /// <summary>엔진 점수 델타 적용 (하한 0 보장 — PostgreSQL GREATEST 사용)</summary>
-    public void ApplyEngineScore(string userId, double gDelta, double nDelta, double dDelta)
+    /// <summary>엔진 점수 델타 적용 — 4엔진 (하한 0 보장)</summary>
+    public void ApplyEngineScore(string userId, double gDelta, double nDelta, double dDelta, double bDelta = 0)
     {
         using var conn = _db.OpenConnection();
-        // PostgreSQL: GREATEST(val + delta, 0)  (MSSQL IIF/ISNULL 대체)
         conn.Execute(
             @"UPDATE members SET
               googlescore = GREATEST(COALESCE(googlescore, 0) + @gDelta, 0),
               naverscore  = GREATEST(COALESCE(naverscore,  0) + @nDelta, 0),
-              daumscore   = GREATEST(COALESCE(daumscore,   0) + @dDelta, 0)
+              daumscore   = GREATEST(COALESCE(daumscore,   0) + @dDelta, 0),
+              bravescore  = GREATEST(COALESCE(bravescore,  0) + @bDelta, 0)
               WHERE userid = @userId",
-            new { gDelta, nDelta, dDelta, userId });
+            new { gDelta, nDelta, dDelta, bDelta, userId });
     }
 
-    /// <summary>엔진 점수 초기화</summary>
+    /// <summary>엔진 점수 초기화 (4엔진)</summary>
     public void ResetEngineScores(string userId)
     {
         using var conn = _db.OpenConnection();
         conn.Execute(
-            "UPDATE members SET googlescore = 0, naverscore = 0, daumscore = 0 WHERE userid = @userId",
+            "UPDATE members SET googlescore = 0, naverscore = 0, daumscore = 0, bravescore = 0 WHERE userid = @userId",
             new { userId });
     }
 
-    /// <summary>비밀번호 변경</summary>
+    /// <summary>비밀번호 변경 — BCrypt 우선, MD5 폴백 (Authenticate와 동일 로직)</summary>
     public bool ChangePassword(string userId, string oldPw, string newPw)
     {
-        string oldHash = GetMD5(oldPw);
         using var conn = _db.OpenConnection();
-        var exists = conn.QueryFirstOrDefault<string>(
-            "SELECT userid FROM members WHERE userid = @userId AND passwd = @oldHash",
-            new { userId, oldHash });
-        if (exists == null) return false;
+        var stored = conn.QueryFirstOrDefault<string>(
+            "SELECT passwd FROM members WHERE userid = @userId",
+            new { userId });
+        if (stored == null) return false;
+
+        stored = stored.Trim();
+        bool match = stored.StartsWith("$2")
+            ? BCrypt.Net.BCrypt.Verify(oldPw, stored)
+            : string.Equals(stored, GetMD5(oldPw), StringComparison.OrdinalIgnoreCase);
+        if (!match) return false;
+
+        string newHash = BCrypt.Net.BCrypt.HashPassword(newPw, workFactor: 11);
         conn.Execute("UPDATE members SET passwd = @newHash WHERE userid = @userId",
-            new { newHash = GetMD5(newPw), userId });
+            new { newHash, userId });
         return true;
     }
 

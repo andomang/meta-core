@@ -12,11 +12,13 @@ public class BraveCrawler
 {
     private readonly IHttpClientFactory _httpFactory;
     private readonly string _apiKey;
+    private readonly ApiUsageService _usage;
 
-    public BraveCrawler(IHttpClientFactory httpFactory, IConfiguration config)
+    public BraveCrawler(IHttpClientFactory httpFactory, IConfiguration config, ApiUsageService usage)
     {
         _httpFactory = httpFactory;
         _apiKey = config["ApiKeys:BraveApiKey"] ?? "";
+        _usage = usage;
     }
 
     /// <summary>Brave Search로 결과 가져오기 (offset: 페이지네이션 시작 인덱스)</summary>
@@ -49,6 +51,7 @@ public class BraveCrawler
             request.Headers.Add("X-Subscription-Token", _apiKey);
 
             var response = await client.SendAsync(request);
+            _usage.Increment("brave");
             if (!response.IsSuccessStatusCode) return results;
 
             var json = await response.Content.ReadAsStringAsync();

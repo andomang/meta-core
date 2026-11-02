@@ -32,8 +32,31 @@ public class SettingsModel : PageModel
     public double GooglePct { get; set; }
     public double NaverPct { get; set; }
     public double DaumPct { get; set; }
+    public double BravePct { get; set; }
     public List<dynamic> RecentSearches { get; set; } = new();
     public List<dynamic> MyPosts { get; set; } = new();
+
+    /// <summary>비밀번호 변경 POST 핸들러 — 비밀번호 정책 검증 포함</summary>
+    public IActionResult OnPostChangePw()
+    {
+        string? uid = HttpContext.Session.GetString("UserID");
+        if (uid == null) return new JsonResult(new { result = "unauthorized" });
+
+        string oldPw = Request.HasFormContentType && Request.Form.ContainsKey("oldPw")
+            ? Request.Form["oldPw"].ToString() : "";
+        string newPw = Request.HasFormContentType && Request.Form.ContainsKey("newPw")
+            ? Request.Form["newPw"].ToString() : "";
+
+        // 서버측 비밀번호 정책 검증 (8자 이상, 영문+숫자+특수문자)
+        if (newPw.Length < 8 ||
+            !System.Text.RegularExpressions.Regex.IsMatch(newPw, @"[A-Za-z]") ||
+            !System.Text.RegularExpressions.Regex.IsMatch(newPw, @"[0-9]") ||
+            !System.Text.RegularExpressions.Regex.IsMatch(newPw, @"[^A-Za-z0-9]"))
+            return new JsonResult(new { result = "weak_password" });
+
+        bool ok = _memberDao.ChangePassword(uid, oldPw, newPw);
+        return new JsonResult(new { result = ok ? "ok" : "wrongPw" });
+    }
 
     /// <summary>설정 페이지 로드</summary>
     public IActionResult OnGet(string? handler = null)
@@ -64,18 +87,19 @@ public class SettingsModel : PageModel
         TotalSearches = _searchDao.GetTotalSearchCount(uid);
         TopKeyword = _searchDao.GetTopKeyword(uid);
 
-        // 엔진 점수 비율
-        var (g, n, d) = _memberDao.GetEngineScores(uid);
-        double total = g + n + d;
+        // 엔진 점수 비율 (4엔진)
+        var (g, n, d, bv) = _memberDao.GetEngineScores(uid);
+        double total = g + n + d + bv;
         if (total > 0)
         {
             GooglePct = g / total * 100;
             NaverPct = n / total * 100;
             DaumPct = d / total * 100;
+            BravePct = bv / total * 100;
         }
         else
         {
-            GooglePct = NaverPct = DaumPct = 33.3;
+            GooglePct = NaverPct = DaumPct = BravePct = 25.0;
         }
 
         // 최근 검색어
@@ -114,25 +138,26 @@ public class SettingsModel : PageModel
         }
     }
 
-    /// <summary>비밀번호 변경</summary>
+    /// <summary>비밀번호 변경 — 비밀번호 정책 검증 포함</summary>
     private IActionResult OnChangePw(string uid)
     {
-        string oldPw = Request.Query["oldPw"].ToString();
-        string newPw = Request.Query["newPw"].ToString();
+        // POST body 또는 쿼리스트링 둘 다 지원 (하위 호환)
+        string oldPw = Request.HasFormContentType && Request.Form.ContainsKey("oldPw")
+            ? Request.Form["oldPw"].ToString()
+            : Request.Query["oldPw"].ToString();
+        string newPw = Request.HasFormContentType && Request.Form.ContainsKey("newPw")
+            ? Request.Form["newPw"].ToString()
+            : Request.Query["newPw"].ToString();
 
-        using var conn = _db.OpenConnection();
-        string oldHash = Services.MemberDao.GetMD5(oldPw);
-        var check = conn.QueryFirstOrDefault<string>(
-            "SELECT userid FROM members WHERE userid=@uid AND passwd=@oldHash",
-            new { uid, oldHash });
-        if (check == null)
-            return new JsonResult(new { result = "wrongPw" });
+        // 서버측 비밀번호 정책 검증 (8자 이상, 영문+숫자+특수문자)
+        if (newPw.Length < 8 ||
+            !System.Text.RegularExpressions.Regex.IsMatch(newPw, @"[A-Za-z]") ||
+            !System.Text.RegularExpressions.Regex.IsMatch(newPw, @"[0-9]") ||
+            !System.Text.RegularExpressions.Regex.IsMatch(newPw, @"[^A-Za-z0-9]"))
+            return new JsonResult(new { result = "weak_password" });
 
-        string newHash = Services.MemberDao.GetMD5(newPw);
-        conn.Execute("UPDATE members SET passwd=@newHash WHERE userid=@uid",
-            new { newHash, uid });
-
-        return new JsonResult(new { result = "ok" });
+        bool ok = _memberDao.ChangePassword(uid, oldPw, newPw);
+        return new JsonResult(new { result = ok ? "ok" : "wrongPw" });
     }
 
     /// <summary>기간별 검색 기록 삭제</summary>
@@ -160,9 +185,9 @@ public class SettingsModel : PageModel
         _memberDao.UpdateSettings(uid, newVal, lang);
         HttpContext.Session.SetString("IsDark", newVal.ToString());
 
-        // 쿠키 동기화
+        // 쿠키 동기화 (보안 옵션 포함)
         Response.Cookies.Append("DarkMode", newVal ? "1" : "0",
-            new CookieOptions { Expires = DateTimeOffset.Now.AddDays(30) });
+            new CookieOptions { Expires = DateTimeOffset.Now.AddDays(30), Secure = true, SameSite = SameSiteMode.Lax });
 
         return new JsonResult(new { result = "ok", isDark = newVal });
     }
@@ -178,17 +203,23 @@ public class SettingsModel : PageModel
         HttpContext.Session.SetString("Lang", lang);
 
         Response.Cookies.Append("Language", lang,
-            new CookieOptions { Expires = DateTimeOffset.Now.AddDays(30) });
+            new CookieOptions { Expires = DateTimeOffset.Now.AddDays(30), Secure = true, SameSite = SameSiteMode.Lax });
 
         return new JsonResult(new { result = "ok" });
     }
 
-    /// <summary>프로필 정보 수정</summary>
+    /// <summary>프로필 정보 수정 — XSS 방지 태그 제거 + 길이 제한</summary>
     private IActionResult OnUpdateProfile(string uid)
     {
-        string name = Request.Query["name"].ToString().Trim();
-        string nick = Request.Query["nick"].ToString().Trim();
+        string name = System.Text.RegularExpressions.Regex.Replace(
+            Request.Query["name"].ToString().Trim(), "<.*?>", "");
+        string nick = System.Text.RegularExpressions.Regex.Replace(
+            Request.Query["nick"].ToString().Trim(), "<.*?>", "");
         string email = Request.Query["email"].ToString().Trim();
+
+        // 길이 제한 (20자)
+        if (name.Length > 20) name = name[..20];
+        if (nick.Length > 20) nick = nick[..20];
 
         using var conn = _db.OpenConnection();
         conn.Execute(

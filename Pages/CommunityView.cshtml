@@ -1,7 +1,11 @@
 @page
 @model CommunityViewModel
 @{
-    ViewData["Title"] = Model.Post?.Title ?? "게시글";
+    ViewData["Title"] = (Model.Post?.Title ?? "게시글") + " - Meta Search 커뮤니티";
+}
+
+@section HeadContent {
+    <meta name="description" content="@(Model.Post?.Title ?? "게시글") - Meta Search 커뮤니티 게시판. 다양한 정보를 공유하고 토론하는 무료 온라인 커뮤니티입니다." />
 }
 
 <div class="max-w-4xl mx-auto px-6 py-12 min-h-screen">
@@ -41,6 +45,18 @@
         <!-- 첨부파일 -->
         @if (!string.IsNullOrEmpty(Model.Post?.FileName))
         {
+            // 이미지 파일이면 인라인 미리보기 표시
+            var ext = System.IO.Path.GetExtension(Model.Post.FileName).ToLowerInvariant();
+            var isImage = ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".webp";
+
+            if (isImage)
+            {
+                <div class="mx-8 mb-4">
+                    <img src="/bbs/@Model.Post.FileName" alt="첨부 이미지"
+                         class="max-w-full max-h-96 rounded-2xl border dark:border-slate-700 shadow-sm" />
+                </div>
+            }
+
             <div class="mx-8 mb-8 p-5 bg-blue-50 dark:bg-blue-950 rounded-2xl border border-blue-100 dark:border-blue-900 flex items-center justify-between">
                 <div class="flex items-center gap-3">
                     <i data-lucide="paperclip" class="text-blue-500 dark:text-blue-400"></i>

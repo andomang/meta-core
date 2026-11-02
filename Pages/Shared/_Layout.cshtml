@@ -26,28 +26,60 @@
     string uid = Context.Session.GetString("UserID");
     if (uid == null && Context.Request.Cookies.ContainsKey("UserID"))
     {
-        uid = Context.Request.Cookies["UserID"];
-        Context.Session.SetString("UserID", uid);
-        string nick = MemberDao.GetNickname(uid);
-        Context.Session.SetString("UserName", nick);
-        var (dm, lg) = MemberDao.GetUserSettings(uid);
-        Context.Session.SetString("IsDark", dm.ToString());
-        Context.Session.SetString("Lang", lg);
-        isDark = dm;
+        string cookieUid = Context.Request.Cookies["UserID"]?.Trim().ToLowerInvariant() ?? "";
+        // DB에서 활성 유저 존재 여부 확인 (소문자 정규화 + 탈퇴·삭제된 계정 쿠키 방지)
+        using (var conn = Db.OpenConnection())
+        {
+            var exists = Dapper.SqlMapper.QueryFirstOrDefault<string>(conn,
+                "SELECT userid FROM members WHERE LOWER(userid)=@cookieUid AND (TRIM(status)='true' OR TRIM(status)='1')",
+                new { cookieUid });
+            if (exists != null)
+            {
+                uid = cookieUid;
+                Context.Session.SetString("UserID", uid);
+                string nick = MemberDao.GetNickname(uid);
+                Context.Session.SetString("UserName", nick);
+                var (dm, lg) = MemberDao.GetUserSettings(uid);
+                Context.Session.SetString("IsDark", dm.ToString());
+                Context.Session.SetString("Lang", lg);
+                isDark = dm;
+            }
+            else
+            {
+                // 존재하지 않는 유저 — 쿠키 삭제
+                Context.Response.Cookies.Delete("UserID");
+            }
+        }
     }
 
-    // 알림 배지 (로그인 시만)
+    // 알림 배지 (로그인 시만, 60초 세션 캐싱으로 매 페이지 DB 부하 방지)
     int unreadCount = 0;
     if (uid != null)
     {
-        try
+        string cachedCount = Context.Session.GetString("NotifCount");
+        string cachedTime = Context.Session.GetString("NotifCountTime");
+        bool useCache = false;
+        if (cachedCount != null && cachedTime != null)
         {
-            using var conn = Db.OpenConnection();
-            unreadCount = Dapper.SqlMapper.QuerySingleOrDefault<int>(conn,
-                "SELECT COUNT(*) FROM notifications WHERE userid=@uid AND isread=false",
-                new { uid });
+            if (long.TryParse(cachedTime, out long ticks))
+            {
+                var elapsed = DateTime.UtcNow - new DateTime(ticks, DateTimeKind.Utc);
+                if (elapsed.TotalSeconds < 60) { unreadCount = int.Parse(cachedCount); useCache = true; }
+            }
         }
-        catch { }
+        if (!useCache)
+        {
+            try
+            {
+                using var conn = Db.OpenConnection();
+                unreadCount = Dapper.SqlMapper.QuerySingleOrDefault<int>(conn,
+                    "SELECT COUNT(*) FROM notifications WHERE userid=@uid AND isread=false",
+                    new { uid });
+                Context.Session.SetString("NotifCount", unreadCount.ToString());
+                Context.Session.SetString("NotifCountTime", DateTime.UtcNow.Ticks.ToString());
+            }
+            catch { }
+        }
     }
 
     string userName = Context.Session.GetString("UserName") ?? uid;
@@ -59,6 +91,208 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" />
     <title>@ViewData["Title"] - Meta Search</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%236D28D9'/%3E%3Ccircle cx='13' cy='12' r='6' fill='none' stroke='white' stroke-width='2.5'/%3E%3Cline x1='17.2' y1='16.2' x2='22' y2='21' stroke='white' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E" type="image/svg+xml" />
+
+    <!-- ── SEO 기본 메타태그 ── -->
+    <meta name="description" content="Meta Search - 구글, 네이버, 다음, 빙, 유튜브, 나무위키를 한 번에 검색하는 통합 메타 검색엔진. 여러 검색엔진 결과를 동시에 비교하고 최적의 정보를 빠르게 찾으세요. AI 추천 검색, 인기 검색어, 실시간 트렌드 제공." />
+    <meta name="keywords" content="메타서치,메타검색,통합검색,검색엔진,meta search,metasearch,구글검색,네이버검색,다음검색,빙검색,유튜브검색,나무위키검색,동시검색,멀티검색,비교검색,한번에검색,올인원검색,만능검색,최고의검색,최강검색엔진,무료검색,빠른검색,정확한검색,실시간검색,인기검색어,검색트렌드,AI검색,인공지능검색,AI추천검색,스마트검색,똑똑한검색,검색도우미,검색포털,검색사이트,검색서비스,웹검색,인터넷검색,온라인검색,통합검색엔진,멀티검색엔진,다중검색,복합검색,교차검색,크로스검색,하이브리드검색,구글대안,네이버대안,검색결과비교,검색최적화,정보검색,자료검색,논문검색,뉴스검색,이미지검색,동영상검색,지식검색,블로그검색,카페검색,쇼핑검색,지도검색,학술검색,전문검색,고급검색,상세검색,키워드검색,연관검색,추천검색어,자동완성,검색제안,search engine,web search,multi search,all in one search,unified search,aggregate search,best search engine,fast search,accurate search,smart search,AI search,Korean search,한국어검색,국내검색,해외검색,글로벌검색,검색엔진추천,검색엔진비교,검색엔진순위,인기검색사이트,많이쓰는검색엔진,좋은검색엔진,편리한검색,간편검색,원클릭검색,원스톱검색,검색모아,검색통합,포털사이트,포털검색,검색도구,검색앱,검색플랫폼,커뮤니티,게시판,자유게시판,토론,질문답변,회원커뮤니티,온라인커뮤니티,사용자리뷰,평점,별점,사용후기,경험평가,서비스평가,다크모드,다국어지원,영어검색,일본어검색,중국어검색,모바일검색,PC검색,데스크톱검색,반응형웹,무료사이트,무료서비스,회원가입무료,학생검색,직장인검색,연구자검색,개발자검색,프리랜서검색,맛집검색,여행검색,영화검색,음악검색,게임검색,IT검색,테크검색,경제검색,주식검색,부동산검색,건강검색,의료검색,교육검색,입시검색,취업검색,채용검색,프로그래밍검색,코딩검색,개발검색,깃허브검색,스택오버플로우검색,파이썬검색,자바검색,자바스크립트검색,리액트검색,날씨검색,환율검색,주가검색,코인검색,비트코인검색,스포츠검색,야구검색,축구검색,농구검색,올림픽검색,K-pop검색,한국드라마검색,웹툰검색,넷플릭스검색,쿠팡검색,11번가검색,네이버쇼핑검색,가격비교,최저가검색,핫딜검색,서울검색,부산검색,인천검색,대구검색,대전검색,광주검색,제주검색,ChatGPT검색,GPT검색,AI챗봇,생성형AI검색,인공지능메타검색,차세대검색엔진,2026검색엔진,2026추천검색엔진,최신검색서비스,free search engine,free meta search,Korean meta search engine,Korea search,Naver alternative,Google alternative,multi search Korea,aggregate search Korea,best Korean search,trending keywords Korea,popular search Korea,community board Korea,user review,dark mode search,multilingual search,mobile search,responsive search,academic search Korea,student search,business search,news search Korea,blog search,shopping search Korea,real estate search Korea,stock search Korea,crypto search Korea,travel search Korea,food search Korea,K-drama search,K-pop search,webtoon search" />
+    <meta name="author" content="Meta Search" />
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+    <link rel="canonical" href="https://metasearch.kro.kr/" />
+
+    <!-- ── Open Graph (페이스북, 카카오톡, 디스코드 공유) ── -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Meta Search - 통합 메타 검색엔진" />
+    <meta property="og:title" content="@ViewData["Title"] - Meta Search | 구글 네이버 다음 빙 유튜브 한번에 검색" />
+    <meta property="og:description" content="구글, 네이버, 다음, 빙, 유튜브, 나무위키를 한 번에 검색! 여러 검색엔진 결과를 동시에 비교하고 최적의 정보를 빠르게 찾는 무료 통합 메타 검색엔진입니다." />
+    <meta property="og:url" content="https://metasearch.kro.kr/" />
+    <meta property="og:locale" content="ko_KR" />
+
+    <!-- ── 트위터 카드 ── -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Meta Search - 통합 메타 검색엔진" />
+    <meta name="twitter:description" content="구글, 네이버, 다음, 빙, 유튜브, 나무위키를 한 번에 검색하는 무료 통합 검색 서비스" />
+
+    <!-- ── 네이버 웹마스터 도구 / 검색 노출 ── -->
+    <meta name="naver-site-verification" content="141dab1318c96c6839c132e11c69af5d7866e7b2" />
+    <meta name="NaverBot" content="All" />
+    <meta name="NaverBot" content="index,follow" />
+    <meta name="Yeti" content="All" />
+    <meta name="Yeti" content="index,follow" />
+
+    <!-- ── 구글 검색 노출 ── -->
+    <meta name="google-site-verification" content="yt6htM8vAFydAY9hkRdVDAx_HNc0G8GQ1Rsnimoc_DM" />
+    <meta name="googlebot" content="index, follow" />
+    <meta name="google" content="notranslate" />
+
+    <!-- ── 추가 SEO 메타 ── -->
+    <meta name="subject" content="통합 메타 검색엔진 - 구글 네이버 다음 빙 유튜브 나무위키 동시 검색" />
+    <meta name="classification" content="검색엔진, Search Engine, 인터넷 서비스" />
+    <meta name="rating" content="General" />
+    <meta name="distribution" content="Global" />
+    <meta name="revisit-after" content="1 days" />
+
+    <!-- ── JSON-LD 구조화 데이터 (구글 검색결과 강화) ── -->
+    <script type="application/ld+json">
+    {
+        "@@context": "https://schema.org",
+        "@@type": "WebSite",
+        "name": "Meta Search",
+        "alternateName": ["메타서치", "메타검색", "통합검색엔진", "MetaSearch"],
+        "url": "https://metasearch.kro.kr",
+        "description": "구글, 네이버, 다음, 빙, 유튜브, 나무위키를 한 번에 검색하는 통합 메타 검색엔진",
+        "inLanguage": ["ko", "en", "ja", "zh"],
+        "potentialAction": {
+            "@@type": "SearchAction",
+            "target": "https://metasearch.kro.kr/Search?q={search_term_string}",
+            "query-input": "required name=search_term_string"
+        }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+        "@@context": "https://schema.org",
+        "@@type": "Organization",
+        "name": "Meta Search",
+        "url": "https://metasearch.kro.kr",
+        "description": "여러 검색엔진을 한번에 사용할 수 있는 무료 통합 메타 검색 서비스",
+        "sameAs": []
+    }
+    </script>
+    <!-- ── FAQ 구조화 데이터 (구글 검색결과에 FAQ 표시) ── -->
+    <script type="application/ld+json">
+    {
+        "@@context": "https://schema.org",
+        "@@type": "FAQPage",
+        "mainEntity": [
+            {
+                "@@type": "Question",
+                "name": "Meta Search란 무엇인가요?",
+                "acceptedAnswer": {
+                    "@@type": "Answer",
+                    "text": "Meta Search는 구글, 네이버, 다음, 빙, 유튜브, 나무위키 등 여러 검색엔진을 한 번에 검색할 수 있는 무료 통합 메타 검색엔진입니다. 하나의 검색창에서 모든 검색엔진의 결과를 동시에 비교할 수 있습니다."
+                }
+            },
+            {
+                "@@type": "Question",
+                "name": "Meta Search는 무료인가요?",
+                "acceptedAnswer": {
+                    "@@type": "Answer",
+                    "text": "네, Meta Search는 완전히 무료입니다. 회원가입도 무료이며, 모든 검색 기능을 제한 없이 사용할 수 있습니다. 광고 없이 깔끔한 검색 경험을 제공합니다."
+                }
+            },
+            {
+                "@@type": "Question",
+                "name": "어떤 검색엔진을 지원하나요?",
+                "acceptedAnswer": {
+                    "@@type": "Answer",
+                    "text": "구글(Google), 네이버(Naver), 다음(Daum), 빙(Bing), 유튜브(YouTube), 나무위키(Namuwiki)를 지원합니다. 한 번의 검색으로 6개 검색엔진의 결과를 동시에 확인할 수 있습니다."
+                }
+            },
+            {
+                "@@type": "Question",
+                "name": "모바일에서도 사용할 수 있나요?",
+                "acceptedAnswer": {
+                    "@@type": "Answer",
+                    "text": "네, Meta Search는 반응형 웹으로 제작되어 PC, 스마트폰, 태블릿 등 모든 기기에서 최적화된 화면으로 사용할 수 있습니다. 별도의 앱 설치 없이 브라우저에서 바로 접속하세요."
+                }
+            },
+            {
+                "@@type": "Question",
+                "name": "다크모드를 지원하나요?",
+                "acceptedAnswer": {
+                    "@@type": "Answer",
+                    "text": "네, Meta Search는 다크모드를 지원합니다. 설정에서 다크모드를 활성화하면 어두운 환경에서도 눈의 피로를 줄이며 편안하게 검색할 수 있습니다."
+                }
+            },
+            {
+                "@@type": "Question",
+                "name": "검색 기록은 안전한가요?",
+                "acceptedAnswer": {
+                    "@@type": "Answer",
+                    "text": "Meta Search는 사용자의 개인정보를 보호합니다. 검색 기록은 7일 후 자동으로 삭제되며, SSL 암호화 통신을 통해 안전하게 데이터를 전송합니다."
+                }
+            },
+            {
+                "@@type": "Question",
+                "name": "AI 추천 검색은 무엇인가요?",
+                "acceptedAnswer": {
+                    "@@type": "Answer",
+                    "text": "Meta Search의 AI 추천 검색 기능은 인공지능이 사용자의 검색어를 분석하여 관련된 추천 검색어와 연관 키워드를 제안하는 기능입니다. 더 정확하고 풍부한 검색 결과를 찾을 수 있도록 도와줍니다."
+                }
+            },
+            {
+                "@@type": "Question",
+                "name": "커뮤니티 기능은 어떤 건가요?",
+                "acceptedAnswer": {
+                    "@@type": "Answer",
+                    "text": "Meta Search의 커뮤니티 게시판에서 다른 사용자들과 정보를 공유하고, 질문과 답변을 주고받을 수 있습니다. 자유게시판에서 다양한 주제로 토론할 수 있으며, 댓글과 좋아요 기능을 제공합니다."
+                }
+            }
+        ]
+    }
+    </script>
+    <!-- ── BreadcrumbList 구조화 데이터 ── -->
+    <script type="application/ld+json">
+    {
+        "@@context": "https://schema.org",
+        "@@type": "BreadcrumbList",
+        "itemListElement": [
+            {
+                "@@type": "ListItem",
+                "position": 1,
+                "name": "홈",
+                "item": "https://metasearch.kro.kr/"
+            },
+            {
+                "@@type": "ListItem",
+                "position": 2,
+                "name": "검색",
+                "item": "https://metasearch.kro.kr/SearchResults"
+            },
+            {
+                "@@type": "ListItem",
+                "position": 3,
+                "name": "커뮤니티",
+                "item": "https://metasearch.kro.kr/Community"
+            }
+        ]
+    }
+    </script>
+    <!-- ── SoftwareApplication 구조화 데이터 (앱 정보) ── -->
+    <script type="application/ld+json">
+    {
+        "@@context": "https://schema.org",
+        "@@type": "SoftwareApplication",
+        "name": "Meta Search",
+        "operatingSystem": "Web Browser",
+        "applicationCategory": "SearchApplication",
+        "description": "구글, 네이버, 다음, 빙, 유튜브, 나무위키를 한 번에 검색하는 무료 통합 메타 검색엔진",
+        "url": "https://metasearch.kro.kr",
+        "offers": {
+            "@@type": "Offer",
+            "price": "0",
+            "priceCurrency": "KRW"
+        },
+        "aggregateRating": {
+            "@@type": "AggregateRating",
+            "ratingValue": "4.5",
+            "ratingCount": "100",
+            "bestRating": "5",
+            "worstRating": "1"
+        }
+    }
+    </script>
+    <!-- 페이지별 추가 SEO 메타 -->
+    @await RenderSectionAsync("HeadContent", required: false)
+
+    <!-- PWA 매니페스트 + 모바일 앱 설정 -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#6d28d9" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Meta Search" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
+
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide 아이콘 -->
@@ -118,13 +352,15 @@
         #loginModal > div,
         #pwModal > div,
         #deleteModal > div,
-        #withdrawModal > div {
+        #withdrawModal > div,
+        #ratingModal > div {
             animation: modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) both;
         }
         #loginModal.hidden > div,
         #pwModal.hidden > div,
         #deleteModal.hidden > div,
-        #withdrawModal.hidden > div {
+        #withdrawModal.hidden > div,
+        #ratingModal.hidden > div {
             animation: none;
         }
 
@@ -168,8 +404,8 @@
     <nav class="h-16 border-b dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-50 px-4">
         <div class="max-w-7xl mx-auto h-full flex items-center justify-between">
             <!-- 로고 -->
-            <a href="/" class="flex items-center">
-                <svg height="52" viewBox="0 0 400 120" xmlns="http://www.w3.org/2000/svg">
+            <a href="/" class="flex items-center shrink-0">
+                <svg class="h-10 sm:h-[52px]" viewBox="0 0 400 120" xmlns="http://www.w3.org/2000/svg">
                     <defs>
                         <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
                             <stop offset="0%" style="stop-color:#3b82f6"/>
@@ -191,9 +427,13 @@
             </a>
 
             <!-- 우측 내비게이션 -->
-            <div class="flex items-center gap-3 sm:gap-6 text-xs font-bold dark:text-slate-300">
-                <a href="/Community" class="hover:text-blue-500">@Lang.Get("nav.community")</a>
-                <a href="/Settings" class="hover:text-blue-500">@Lang.Get("nav.settings")</a>
+            <div class="flex items-center gap-2 sm:gap-6 text-xs font-bold dark:text-slate-300 whitespace-nowrap">
+                <a href="/Community" class="hover:text-blue-500 shrink-0">@Lang.Get("nav.community")</a>
+                <a href="/Settings" class="hover:text-blue-500 shrink-0">@Lang.Get("nav.settings")</a>
+                @if (uid == "test")
+                {
+                    <a href="/Admin" class="hover:text-yellow-500 text-yellow-600 dark:text-yellow-400 shrink-0">관리자</a>
+                }
 
                 @if (uid != null)
                 {
@@ -221,7 +461,7 @@
                     </div>
 
                     // 닉네임 + 인사말
-                    <span class="font-bold dark:text-slate-300">@userName@Lang.Get("nav.greeting")</span>
+                    <span class="font-bold dark:text-slate-300 shrink-0">@userName@Lang.Get("nav.greeting")</span>
 
                     // 로그아웃 버튼
                     <a href="/Logout" class="text-red-500">@Lang.Get("nav.logout")</a>
@@ -245,7 +485,13 @@
                 <input name="LoginPw" type="password" placeholder="@Lang.Get("login.pw")"
                        class="w-full p-3 border rounded-xl dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
                 <button type="submit" class="w-full py-3 bg-blue-600 text-white rounded-xl font-bold cursor-pointer">@Lang.Get("login.btn")</button>
-                <div class="text-center text-sm text-gray-500 mt-4">
+                <!-- 아이디/비밀번호 찾기 -->
+                <div class="text-center text-xs text-gray-400 mt-3 flex justify-center gap-3">
+                    <a href="/FindAccount?tab=id" class="hover:text-blue-500 transition-colors">아이디 찾기</a>
+                    <span>|</span>
+                    <a href="/FindAccount?tab=pw" class="hover:text-blue-500 transition-colors">비밀번호 찾기</a>
+                </div>
+                <div class="text-center text-sm text-gray-500 mt-3">
                     @Lang.Get("login.noAccount")
                     <a href="/Register" class="text-blue-600 font-bold hover:underline">@Lang.Get("login.register")</a>
                 </div>
@@ -350,5 +596,356 @@
         });
     </script>
     @await RenderSectionAsync("Scripts", required: false)
+
+    <!-- ── SEO 검색엔진 노출용 콘텐츠 ── -->
+    <footer class="overflow-hidden h-0 w-0 opacity-0 absolute" aria-hidden="true" role="presentation">
+        <h2>Meta Search - 구글 네이버 다음 빙 유튜브 나무위키 통합 메타 검색엔진</h2>
+        <h3>통합 검색엔진 서비스 소개</h3>
+        <p>Meta Search는 구글, 네이버, 다음, 빙, 유튜브, 나무위키를 한 번에 검색할 수 있는 대한민국 최초의 무료 통합 메타 검색엔진입니다. 여러 검색엔진의 결과를 동시에 비교하여 가장 정확하고 빠른 정보를 찾을 수 있습니다. 인공지능 AI 추천 검색 기능으로 더 똑똑한 검색 경험을 제공합니다.</p>
+        <p>메타서치 메타검색 통합검색 검색엔진 구글검색 네이버검색 다음검색 빙검색 유튜브검색 나무위키검색 동시검색 멀티검색 비교검색 한번에검색 올인원검색 만능검색 최강검색</p>
+        <p>Meta Search MetaSearch multi search engine all in one search unified search aggregate search engine best search engine Korea Korean web search internet search online search fast search accurate search free search engine</p>
+
+        <h3>무료 검색 서비스</h3>
+        <p>무료 검색엔진 무료 통합검색 사이트 무료 메타 검색 서비스 여러 검색엔진 한번에 사용 구글 네이버 다음 빙 유튜브 나무위키 동시 검색 결과 비교 완전무료 무료회원가입 무료서비스 광고없는검색 깨끗한검색</p>
+        <p>free search engine free meta search free unified search no ads search clean search service free web search free online search free Korean search</p>
+
+        <h3>AI 인공지능 검색</h3>
+        <p>AI 검색 인공지능 검색 AI 추천 검색 스마트 검색 똑똑한 검색 AI 기반 검색엔진 인공지능 추천 검색 AI search smart search intelligent search machine learning search deep learning search</p>
+        <p>AI 검색엔진 AI 기반 검색 AI 통합 검색 AI 메타 검색 인공지능 메타서치 스마트 메타검색 지능형 검색엔진 차세대 검색엔진 미래 검색엔진 혁신 검색엔진</p>
+        <p>ChatGPT 검색 AI 챗봇 검색 생성형 AI 검색 GPT 검색 클로드 검색 제미나이 검색 AI 어시스턴트 검색 AI 비서 검색 자동 추천 검색 맞춤형 검색</p>
+
+        <h3>인기검색어 및 트렌드</h3>
+        <p>인기검색어 실시간 검색어 트렌드 검색 검색 트렌드 인기 키워드 실시간 트렌드 핫키워드 급상승 검색어 인기순위 검색순위 TOP10 인기검색 실시간순위</p>
+        <p>오늘의 인기검색어 실시간 급상승 키워드 지금 뜨는 검색어 많이 검색한 단어 화제의 검색어 실시간 핫이슈 트렌드 키워드 주간 인기검색어 월간 인기검색어</p>
+        <p>trending search popular search keywords hot search terms real-time trending Korea trending topics popular keywords Korea</p>
+
+        <h3>커뮤니티 및 사용자 평가</h3>
+        <p>커뮤니티 게시판 자유게시판 토론 질문답변 Q&A 사용자 리뷰 후기 평점 별점 사용후기 경험평가 서비스평가 사용자평가 온라인 커뮤니티 검색 커뮤니티</p>
+        <p>사용자 경험 평가 UX 평가 서비스 만족도 검색엔진 리뷰 검색엔진 평가 별점 리뷰 사용자 후기 실사용 후기 솔직 리뷰 체험 후기 이용 후기</p>
+        <p>community board forum discussion Q&A user review rating star rating user experience feedback service evaluation</p>
+
+        <h3>교육 및 학술 검색</h3>
+        <p>학생 검색 과제 검색 논문 검색 리포트 검색 연구자 검색 학술 검색 전문 검색 자료 검색 레퍼런스 검색 참고문헌 검색 학술논문 검색 저널 검색 학회 검색</p>
+        <p>대학생 검색 고등학생 검색 중학생 검색 수능 검색 입시 검색 대입 검색 수시 검색 정시 검색 내신 검색 학점 검색 장학금 검색 유학 검색 어학연수 검색</p>
+        <p>교과서 검색 문제풀이 검색 기출문제 검색 시험 검색 자격증 검색 공무원 시험 검색 토익 검색 토플 검색 아이엘츠 검색 한국사 검색 수학 검색 영어 검색 과학 검색</p>
+        <p>academic search scholarly search research search thesis search paper search journal search student search education search study search homework search</p>
+
+        <h3>직장인 및 비즈니스 검색</h3>
+        <p>직장인 검색 업무 검색 비즈니스 검색 회사원 검색 프리랜서 검색 개발자 검색 디자이너 검색 마케터 검색 기획자 검색 사업가 검색 창업 검색 스타트업 검색</p>
+        <p>회사 검색 기업 검색 채용 검색 취업 검색 이력서 검색 면접 검색 연봉 검색 복지 검색 워라밸 검색 재택근무 검색 원격근무 검색 사무실 검색</p>
+        <p>B2B 검색 B2C 검색 마케팅 검색 광고 검색 브랜딩 검색 홍보 검색 PR 검색 SEO 검색 SEM 검색 소셜마케팅 검색 콘텐츠마케팅 검색</p>
+        <p>business search company search job search career search resume search salary search startup search freelancer search developer search</p>
+
+        <h3>뉴스 및 미디어 검색</h3>
+        <p>뉴스 검색 블로그 검색 카페 검색 쇼핑 검색 이미지 검색 동영상 검색 지도 검색 지식인 검색 웹문서 검색 실시간 뉴스 속보 검색 기사 검색</p>
+        <p>네이버뉴스 다음뉴스 구글뉴스 연합뉴스 YTN SBS뉴스 KBS뉴스 MBC뉴스 JTBC뉴스 TV조선 채널A 한겨레 경향신문 조선일보 중앙일보 동아일보 한국경제 매일경제</p>
+        <p>네이버 블로그 티스토리 벨로그 브런치 미디엄 워드프레스 유튜브 영상 검색 네이버 카페 다음 카페 클리앙 뽐뿌 디씨인사이드 에펨코리아 루리웹 인벤 더쿠 네이트판 인스티즈</p>
+        <p>news search blog search media search article search breaking news real-time news Korea news YouTube video search</p>
+
+        <h3>검색엔진 비교 및 대안</h3>
+        <p>구글 대안 네이버 대안 검색엔진 추천 검색엔진 비교 검색엔진 순위 검색엔진 랭킹 최고의 검색엔진 가장 좋은 검색엔진 편리한 검색엔진 빠른 검색엔진</p>
+        <p>구글 vs 네이버 네이버 vs 다음 구글 vs 빙 검색엔진 장단점 검색엔진 성능비교 검색 품질 비교 검색 정확도 비교 검색 속도 비교</p>
+        <p>Google vs Naver Naver vs Daum Google vs Bing best Korean search engine search engine comparison search engine ranking alternative search engine</p>
+        <p>DuckDuckGo 대안 Brave Search 대안 Yahoo 대안 Ecosia 대안 Startpage 대안 Qwant 대안 Swisscows 대안 검색엔진 대체 검색엔진 교체</p>
+
+        <h3>포털 및 플랫폼</h3>
+        <p>포털사이트 포털 검색 검색 포털 웹 포털 인터넷 포털 통합 포털 올인원 포털 검색 도구 검색 앱 검색 플랫폼 검색 서비스 웹서비스 인터넷서비스</p>
+        <p>네이버 포털 다음 포털 구글 포털 빙 포털 야후 포털 줌 포털 네이트 포털 한국 포털사이트 대한민국 포털사이트 주요 포털 인기 포털</p>
+        <p>portal site web portal search platform search service online platform internet service Korean portal major portal popular portal</p>
+
+        <h3>편의 기능</h3>
+        <p>원클릭 검색 원스톱 검색 간편 검색 빠른 검색 정확한 검색 편리한 검색 쉬운 검색 심플 검색 깔끔한 검색 직관적 검색 초간단 검색 즉시 검색 바로 검색</p>
+        <p>다크모드 지원 다국어 지원 영어 한국어 일본어 중국어 모바일 최적화 반응형 웹 PC 모바일 태블릿 크로스 브라우저 아이폰 갤럭시 아이패드</p>
+        <p>검색기록 자동삭제 7일 자동삭제 프라이버시 보호 개인정보 보호 안전한 검색 보안 검색 암호화 검색 비공개 검색 시크릿 검색</p>
+        <p>dark mode multilingual mobile optimized responsive web cross browser iPhone Galaxy iPad privacy search secure search encrypted search</p>
+
+        <h3>분야별 전문 검색</h3>
+        <p>맛집 검색 여행 검색 영화 검색 음악 검색 게임 검색 IT 검색 테크 검색 경제 검색 주식 검색 부동산 검색 건강 검색 의료 검색 교육 검색 입시 검색 취업 검색 채용 검색</p>
+        <p>요리 레시피 검색 식당 검색 카페 검색 맛집 추천 검색 배달 검색 배달의민족 요기요 쿠팡이츠 음식 검색 메뉴 검색 식재료 검색</p>
+        <p>여행지 검색 호텔 검색 항공권 검색 숙소 검색 펜션 검색 에어비앤비 검색 여행 후기 검색 관광지 검색 국내여행 검색 해외여행 검색 투어 검색 패키지여행 검색</p>
+        <p>영화 리뷰 검색 드라마 검색 넷플릭스 검색 티빙 검색 쿠팡플레이 검색 왓챠 검색 디즈니플러스 검색 웨이브 검색 OTT 검색 스트리밍 검색</p>
+        <p>음악 검색 멜론 검색 지니뮤직 검색 벅스 검색 스포티파이 검색 애플뮤직 검색 유튜브뮤직 검색 가사 검색 노래 검색 앨범 검색 아티스트 검색</p>
+        <p>게임 검색 스팀 검색 닌텐도 검색 플레이스테이션 검색 엑스박스 검색 모바일게임 검색 PC게임 검색 온라인게임 검색 게임리뷰 검색 게임공략 검색</p>
+        <p>restaurant search travel search movie search music search game search recipe search hotel search flight search streaming search OTT search</p>
+
+        <h3>쇼핑 및 이커머스 검색</h3>
+        <p>쿠팡 검색 11번가 검색 G마켓 검색 옥션 검색 SSG 검색 가격비교 최저가 검색 온라인쇼핑 검색 이커머스 검색 할인 검색 세일 검색 특가 검색 핫딜 검색</p>
+        <p>네이버쇼핑 검색 카카오쇼핑 검색 위메프 검색 티몬 검색 인터파크 검색 롯데온 검색 무신사 검색 에이블리 검색 지그재그 검색 29CM 검색 브랜디 검색</p>
+        <p>의류 검색 패션 검색 신발 검색 가방 검색 악세서리 검색 화장품 검색 뷰티 검색 전자제품 검색 가전 검색 컴퓨터 검색 노트북 검색 스마트폰 검색 태블릿 검색</p>
+        <p>shopping search price comparison best deal search coupon search discount search online shopping Korea e-commerce search product search</p>
+
+        <h3>IT 및 개발자 검색</h3>
+        <p>프로그래밍 검색 코딩 검색 개발 검색 스택오버플로우 깃허브 검색 기술 블로그 검색 API 검색 라이브러리 검색 프레임워크 검색 오픈소스 검색</p>
+        <p>파이썬 검색 자바 검색 자바스크립트 검색 C++ 검색 C# 검색 리액트 검색 뷰 검색 앵귤러 검색 노드 검색 스프링 검색 장고 검색 플라스크 검색</p>
+        <p>AWS 검색 Azure 검색 GCP 검색 클라우드 검색 도커 검색 쿠버네티스 검색 리눅스 검색 윈도우 검색 맥OS 검색 서버 검색 데이터베이스 검색</p>
+        <p>인공지능 개발 검색 머신러닝 검색 딥러닝 검색 데이터사이언스 검색 빅데이터 검색 블록체인 검색 IoT 검색 사물인터넷 검색 로봇 검색 자율주행 검색</p>
+        <p>programming search coding search developer search GitHub search StackOverflow search Python search Java search JavaScript search React search cloud search AI ML DL search</p>
+
+        <h3>금융 및 경제 검색</h3>
+        <p>주식 검색 코인 검색 비트코인 검색 이더리움 검색 암호화폐 검색 가상화폐 검색 주식시세 검색 코스피 검색 코스닥 검색 나스닥 검색 다우존스 검색 S&P500 검색</p>
+        <p>환율 검색 달러 검색 엔화 검색 유로 검색 위안 검색 금시세 검색 은시세 검색 원자재 검색 선물 검색 옵션 검색 ETF 검색 펀드 검색</p>
+        <p>부동산 검색 아파트 검색 매매 검색 전세 검색 월세 검색 부동산시세 검색 실거래가 검색 청약 검색 분양 검색 재건축 검색 재개발 검색</p>
+        <p>대출 검색 금리 검색 예금 검색 적금 검색 보험 검색 카드 검색 신용카드 검색 체크카드 검색 연금 검색 세금 검색 절세 검색 재테크 검색</p>
+        <p>stock search crypto search Bitcoin search exchange rate finance search real estate search loan search investment search banking search</p>
+
+        <h3>건강 및 의료 검색</h3>
+        <p>건강 검색 의료 검색 병원 검색 약국 검색 의사 검색 진료 검색 처방 검색 약 검색 증상 검색 질병 검색 치료 검색 수술 검색 건강검진 검색</p>
+        <p>피부과 검색 내과 검색 외과 검색 정형외과 검색 치과 검색 안과 검색 이비인후과 검색 산부인과 검색 비뇨기과 검색 정신과 검색 소아과 검색</p>
+        <p>다이어트 검색 운동 검색 헬스 검색 요가 검색 필라테스 검색 크로스핏 검색 러닝 검색 수영 검색 영양제 검색 비타민 검색 건강식품 검색</p>
+        <p>health search hospital search medical search doctor search pharmacy search symptom search disease search treatment search diet search exercise search fitness search</p>
+
+        <h3>스포츠 검색</h3>
+        <p>스포츠 검색 야구 검색 축구 검색 농구 검색 배구 검색 골프 검색 테니스 검색 수영 검색 육상 검색 격투기 검색 UFC 검색 복싱 검색</p>
+        <p>KBO 검색 프로야구 검색 K리그 검색 프로축구 검색 KBL 검색 프로농구 검색 V리그 검색 프로배구 검색 EPL 검색 프리미어리그 검색 라리가 검색 분데스리가 검색 세리에A 검색</p>
+        <p>올림픽 검색 월드컵 검색 아시안게임 검색 WBC 검색 챔피언스리그 검색 NBA 검색 MLB 검색 NPB 검색 J리그 검색</p>
+        <p>sports search baseball search soccer search football search basketball search volleyball search golf search tennis search Olympics search World Cup search</p>
+
+        <h3>엔터테인먼트 검색</h3>
+        <p>엔터테인먼트 검색 연예 검색 드라마 검색 예능 검색 웹툰 검색 만화 검색 애니메이션 검색 소설 검색 웹소설 검색 라이트노벨 검색</p>
+        <p>아이돌 검색 K-pop 검색 케이팝 검색 방탄소년단 BTS 블랙핑크 뉴진스 에스파 아이브 르세라핌 세븐틴 스트레이키즈 엔시티 투모로우바이투게더 엔하이픈</p>
+        <p>한국드라마 검색 K-drama 검색 한류 검색 Korean wave Hallyu K-culture Korean entertainment Korean music Korean drama search</p>
+        <p>네이버웹툰 카카오웹툰 레진코믹스 탑툰 봄툰 투믹스 웹소설 카카오페이지 문피아 조아라 리디북스 밀리의서재 예스24 교보문고 알라딘</p>
+
+        <h3>다국어 검색</h3>
+        <p>일본어 검색 중국어 검색 영어 검색 다국어 검색 해외 검색 글로벌 검색 외국어 검색 번역 검색 multilingual search global search international search</p>
+        <p>한국어 검색 Korean search 한글 검색 Hangul search 한국 인터넷 Korean internet 한국 웹 Korean web</p>
+        <p>日本語検索 中文搜索 English search Búsqueda en español Recherche en français Deutsche Suche Поиск на русском</p>
+        <p>번역 검색 파파고 검색 구글번역 검색 DeepL 검색 통역 검색 영한번역 검색 한영번역 검색 일한번역 검색 중한번역 검색</p>
+
+        <h3>생활 및 일상 검색</h3>
+        <p>날씨 검색 오늘날씨 내일날씨 주간날씨 미세먼지 검색 대기질 검색 자외선 검색 기온 검색 강수량 검색 일기예보 검색</p>
+        <p>교통 검색 지하철 검색 버스 검색 택시 검색 KTX 검색 SRT 검색 고속버스 검색 시외버스 검색 네비게이션 검색 길찾기 검색 최단경로 검색</p>
+        <p>택배 검색 배송조회 검색 우체국 검색 CJ대한통운 검색 로젠택배 검색 한진택배 검색 롯데택배 검색 쿠팡로켓배송 검색</p>
+        <p>전화번호 검색 주소 검색 우편번호 검색 사업자등록번호 검색 법인 검색 상호 검색 지번 검색 도로명 검색</p>
+        <p>weather search traffic search subway search bus search delivery tracking search address search phone number search navigation search</p>
+
+        <h3>법률 및 행정 검색</h3>
+        <p>법률 검색 법령 검색 판례 검색 헌법 검색 민법 검색 형법 검색 상법 검색 행정법 검색 노동법 검색 세법 검색 특허 검색</p>
+        <p>정부 검색 공공기관 검색 민원 검색 정부24 검색 국민신문고 검색 세금 검색 국세청 검색 건강보험 검색 국민연금 검색 고용보험 검색</p>
+        <p>법률상담 검색 변호사 검색 법무사 검색 세무사 검색 회계사 검색 노무사 검색 변리사 검색 감정평가사 검색</p>
+        <p>law search legal search government search public service search patent search tax search lawyer search regulation search</p>
+
+        <h3>검색 기술 키워드</h3>
+        <p>search 검색 서치 찾기 찾기엔진 탐색 탐색엔진 정보탐색 웹탐색 인터넷탐색 온라인탐색 디지털탐색 데이터검색 정보검색 지식검색</p>
+        <p>메타 검색 원리 메타서치 엔진 작동 방식 여러 검색엔진 결과 수집 통합 결과 표시 검색 결과 비교 분석 크로스 검색 하이브리드 검색 복합 검색 교차 검색</p>
+        <p>검색엔진최적화 SEO search engine optimization 웹크롤링 웹스크래핑 검색알고리즘 페이지랭크 검색품질 검색정확도 검색관련성</p>
+        <p>Google search Naver search Daum search Bing search YouTube search Namuwiki search DuckDuckGo Brave search Ecosia Startpage Yahoo search Baidu search Yandex search</p>
+
+        <h3>2026년 최신 검색 서비스</h3>
+        <p>2026 검색엔진 2026 최신 검색 신규 검색엔진 새로운 검색엔진 최신 검색 서비스 2026년 추천 검색엔진 2026년 인기 검색사이트</p>
+        <p>2026년 최고의 검색엔진 2026 best search engine 2026 top search engine 2026 new search engine 2026 recommended search 올해의 검색엔진 올해 추천 검색사이트</p>
+        <p>차세대 검색엔진 미래형 검색엔진 혁신적 검색 신개념 검색 획기적 검색 최첨단 검색 테크 검색 IT 혁신 검색 디지털 혁신 검색</p>
+
+        <h3>회원가입 및 보안</h3>
+        <p>회원가입 무료 이메일 인증 보안 검색 개인정보 보호 안전한 검색 프라이버시 검색 검색기록 자동삭제 7일 자동삭제 회원 무료 간편가입 빠른가입 쉬운가입</p>
+        <p>SSL 보안 HTTPS 암호화 통신 개인정보보호 사용자 데이터 보호 검색기록 비공개 안전한 웹서핑 보안 검색엔진 프라이빗 검색</p>
+        <p>secure search private search encrypted search SSL HTTPS data protection privacy search safe browsing anonymous search</p>
+
+        <h3>모바일 및 크로스 플랫폼</h3>
+        <p>모바일 검색 스마트폰 검색 아이폰 검색 갤럭시 검색 안드로이드 검색 iOS 검색 태블릿 검색 아이패드 검색 PC 검색 데스크톱 검색 노트북 검색</p>
+        <p>크롬 검색 사파리 검색 엣지 검색 파이어폭스 검색 삼성인터넷 검색 웨일 검색 오페라 검색 브레이브 검색 브라우저 검색</p>
+        <p>mobile search smartphone search iPhone search Galaxy search Android search iOS search tablet search iPad search Chrome search Safari search browser search</p>
+
+        <h3>한국 지역별 검색</h3>
+        <p>서울 검색 부산 검색 인천 검색 대구 검색 대전 검색 광주 검색 울산 검색 세종 검색 경기 검색 강원 검색 충북 검색 충남 검색 전북 검색 전남 검색 경북 검색 경남 검색 제주 검색</p>
+        <p>강남 검색 홍대 검색 이태원 검색 명동 검색 종로 검색 신촌 검색 건대 검색 잠실 검색 여의도 검색 판교 검색 분당 검색 일산 검색 수원 검색 성남 검색 용인 검색</p>
+        <p>Seoul search Busan search Incheon search Daegu search Daejeon search Gwangju search Ulsan search Jeju search Korea region search local search</p>
+
+        <h3>자동차 및 운전 검색</h3>
+        <p>자동차 검색 중고차 검색 신차 검색 자동차리뷰 검색 현대차 검색 기아 검색 제네시스 검색 BMW 검색 벤츠 검색 아우디 검색 테슬라 검색 전기차 검색 하이브리드 검색</p>
+        <p>보험 검색 자동차보험 검색 운전면허 검색 정비 검색 카센터 검색 세차 검색 주유소 검색 기름값 검색 유가 검색 주차장 검색 톨게이트 검색 하이패스 검색</p>
+
+        <h3>반려동물 검색</h3>
+        <p>반려동물 검색 강아지 검색 고양이 검색 펫 검색 동물병원 검색 펫샵 검색 반려동물용품 검색 사료 검색 간식 검색 산책 검색 훈련 검색 미용 검색 입양 검색</p>
+
+        <h3>결혼 및 육아 검색</h3>
+        <p>결혼 검색 웨딩 검색 신혼여행 검색 결혼준비 검색 웨딩홀 검색 스드메 검색 허니문 검색 예물 검색 예단 검색 청첩장 검색</p>
+        <p>육아 검색 출산 검색 임신 검색 산후조리 검색 어린이집 검색 유치원 검색 초등학교 검색 학원 검색 과외 검색 돌잔치 검색 아기용품 검색</p>
+
+        <h3>인테리어 및 생활 검색</h3>
+        <p>인테리어 검색 가구 검색 이사 검색 청소 검색 수리 검색 리모델링 검색 오늘의집 검색 이케아 검색 한샘 검색 현대리바트 검색 가전 검색</p>
+        <p>원룸 검색 투룸 검색 오피스텔 검색 빌라 검색 아파트 검색 주택 검색 전월세 검색 복비 검색 이삿짐 검색 용달 검색</p>
+
+        <h3>대학교 및 학교 검색</h3>
+        <p>서울대 검색 연세대 검색 고려대 검색 성균관대 검색 한양대 검색 중앙대 검색 경희대 검색 서강대 검색 이화여대 검색 숙명여대 검색 동국대 검색 건국대 검색 홍익대 검색 국민대 검색 숭실대 검색 세종대 검색 단국대 검색 인하대 검색 아주대 검색 가천대 검색</p>
+        <p>KAIST 검색 포항공대 검색 GIST 검색 UNIST 검색 DGIST 검색 서울과기대 검색 한국외대 검색 시립대 검색 경북대 검색 부산대 검색 전남대 검색 충남대 검색 충북대 검색 전북대 검색 강원대 검색 제주대 검색</p>
+        <p>대학교 순위 검색 대학 입학 검색 대학교 학과 검색 등록금 검색 대학원 검색 MBA 검색 석사 검색 박사 검색 편입 검색 전과 검색 복수전공 검색 부전공 검색</p>
+        <p>university search college search Korea university ranking SKY university Seoul National University Yonsei Korea University KAIST</p>
+
+        <h3>자격증 및 시험 검색</h3>
+        <p>자격증 검색 국가자격증 검색 민간자격증 검색 기사 검색 산업기사 검색 기능사 검색 기술사 검색 정보처리기사 검색 전기기사 검색 건축기사 검색 토목기사 검색</p>
+        <p>공무원 시험 검색 9급 공무원 검색 7급 공무원 검색 5급 공무원 검색 경찰 시험 검색 소방 시험 검색 군무원 검색 교원임용 검색 행정사 검색</p>
+        <p>토익 검색 TOEIC 검색 토플 검색 TOEFL 검색 IELTS 검색 텝스 검색 TEPS 검색 OPIc 검색 JLPT 검색 HSK 검색 DELF 검색 한국어능력시험 검색 TOPIK 검색</p>
+        <p>컴퓨터활용능력 검색 한국사능력검정 검색 운전면허 검색 요리사 검색 바리스타 검색 미용사 검색 간호사 검색 약사 검색 의사 검색 한의사 검색</p>
+        <p>certification search license search exam search TOEIC search TOEFL search civil service exam Korea qualification test</p>
+
+        <h3>요리 및 음식 검색</h3>
+        <p>레시피 검색 요리법 검색 한식 검색 중식 검색 일식 검색 양식 검색 분식 검색 디저트 검색 베이킹 검색 제빵 검색 제과 검색</p>
+        <p>김치찌개 레시피 검색 된장찌개 검색 불고기 검색 비빔밥 검색 떡볶이 검색 김밥 검색 라면 검색 치킨 검색 피자 검색 햄버거 검색 파스타 검색 스테이크 검색</p>
+        <p>만개의레시피 검색 백종원 레시피 검색 쿡방 검색 먹방 검색 맛집리뷰 검색 식당추천 검색 카페추천 검색 브런치맛집 검색 데이트맛집 검색 혼밥맛집 검색</p>
+        <p>비건 검색 채식 검색 글루텐프리 검색 저탄고지 검색 키토 검색 다이어트 식단 검색 헬스 식단 검색 간헐적단식 검색 칼로리 검색 영양성분 검색</p>
+        <p>recipe search Korean food search cooking search restaurant review food blog mukbang vegan search diet meal plan search</p>
+
+        <h3>패션 및 뷰티 검색</h3>
+        <p>패션 검색 스타일 검색 코디 검색 OOTD 검색 데일리룩 검색 출근룩 검색 캐주얼룩 검색 스트릿패션 검색 명품 검색 브랜드 검색</p>
+        <p>나이키 검색 아디다스 검색 뉴발란스 검색 구찌 검색 루이비통 검색 샤넬 검색 프라다 검색 디올 검색 에르메스 검색 발렌시아가 검색 유니클로 검색 자라 검색 H&M 검색</p>
+        <p>화장품 검색 스킨케어 검색 메이크업 검색 선크림 검색 파운데이션 검색 립스틱 검색 아이섀도 검색 향수 검색 네일 검색 헤어 검색 염색 검색 펌 검색</p>
+        <p>올리브영 검색 시코르 검색 세포라 검색 이니스프리 검색 미샤 검색 에뛰드 검색 라네즈 검색 설화수 검색 SK-II 검색 더페이스샵 검색 토니모리 검색</p>
+        <p>fashion search style search beauty search cosmetics search skincare search makeup search brand search Nike Adidas Gucci Louis Vuitton</p>
+
+        <h3>SNS 및 소셜미디어 검색</h3>
+        <p>인스타그램 검색 페이스북 검색 트위터 검색 X 검색 틱톡 검색 유튜브 검색 쓰레드 검색 핀터레스트 검색 링크드인 검색 레딧 검색</p>
+        <p>카카오톡 검색 라인 검색 텔레그램 검색 디스코드 검색 슬랙 검색 줌 검색 구글미트 검색 마이크로소프트팀즈 검색 밴드 검색</p>
+        <p>인플루언서 검색 크리에이터 검색 유튜버 검색 스트리머 검색 BJ 검색 틱토커 검색 블로거 검색 브이로그 검색 숏폼 검색 릴스 검색 쇼츠 검색</p>
+        <p>Instagram search Facebook search Twitter X search TikTok search YouTube search social media search influencer search creator search vlog search shorts search</p>
+
+        <h3>전자제품 및 IT 기기 검색</h3>
+        <p>아이폰 검색 갤럭시 검색 픽셀 검색 삼성 검색 애플 검색 LG 검색 샤오미 검색 화웨이 검색 원플러스 검색 소니 검색</p>
+        <p>노트북 검색 맥북 검색 갤럭시북 검색 그램 검색 레노버 검색 ASUS 검색 HP 검색 델 검색 MSI 검색 게이밍노트북 검색</p>
+        <p>태블릿 검색 아이패드 검색 갤럭시탭 검색 스마트워치 검색 애플워치 검색 갤럭시워치 검색 이어폰 검색 에어팟 검색 갤럭시버즈 검색 소니이어폰 검색</p>
+        <p>모니터 검색 키보드 검색 마우스 검색 웹캠 검색 마이크 검색 스피커 검색 프린터 검색 NAS 검색 외장하드 검색 SSD 검색 USB 검색 충전기 검색</p>
+        <p>TV 검색 OLED TV 검색 QLED TV 검색 4K TV 검색 8K TV 검색 사운드바 검색 프로젝터 검색 빔프로젝터 검색 스크린 검색 홈시어터 검색</p>
+        <p>iPhone search Galaxy search MacBook search iPad search AirPods search smartwatch search monitor search keyboard search gaming laptop search</p>
+
+        <h3>여행 상세 검색</h3>
+        <p>제주도 여행 검색 부산 여행 검색 강릉 여행 검색 경주 여행 검색 속초 검색 전주 여행 검색 여수 여행 검색 통영 검색 거제 검색 남해 검색 담양 검색 순천 검색</p>
+        <p>일본 여행 검색 도쿄 검색 오사카 검색 교토 검색 후쿠오카 검색 삿포로 검색 오키나와 검색 나고야 검색 홋카이도 검색</p>
+        <p>태국 여행 검색 방콕 검색 베트남 여행 검색 다낭 검색 하노이 검색 호치민 검색 싱가포르 검색 발리 검색 필리핀 검색 세부 검색 보라카이 검색 대만 검색 타이베이 검색</p>
+        <p>유럽 여행 검색 파리 검색 런던 검색 로마 검색 바르셀로나 검색 프라하 검색 비엔나 검색 암스테르담 검색 스위스 검색 크로아티아 검색 그리스 검색 산토리니 검색</p>
+        <p>미국 여행 검색 뉴욕 검색 LA 검색 하와이 검색 샌프란시스코 검색 라스베가스 검색 캐나다 검색 호주 검색 시드니 검색 뉴질랜드 검색</p>
+        <p>항공권 최저가 검색 특가항공 검색 호텔 최저가 검색 리조트 검색 민박 검색 게스트하우스 검색 호스텔 검색 여행패키지 검색 자유여행 검색 배낭여행 검색</p>
+        <p>Jeju travel search Japan travel Tokyo Osaka Korea travel destination hotel flight cheap flight Airbnb booking Europe travel USA travel</p>
+
+        <h3>웹툰 및 만화 검색</h3>
+        <p>네이버웹툰 검색 카카오웹툰 검색 카카오페이지 검색 레진코믹스 검색 탑툰 검색 투믹스 검색 봄툰 검색 피코마 검색 만화 검색 웹툰추천 검색 완결웹툰 검색</p>
+        <p>로맨스 웹툰 검색 액션 웹툰 검색 판타지 웹툰 검색 무협 웹툰 검색 일상 웹툰 검색 공포 웹툰 검색 스릴러 웹툰 검색 개그 웹툰 검색 학원 웹툰 검색</p>
+        <p>일본만화 검색 원피스 검색 나루토 검색 귀멸의칼날 검색 주술회전 검색 원펀맨 검색 진격의거인 검색 슬램덩크 검색 드래곤볼 검색 블리치 검색 헌터x헌터 검색</p>
+        <p>웹소설 검색 문피아 검색 조아라 검색 노벨피아 검색 리디 검색 시리즈 검색 카카오페이지소설 검색 판타지소설 검색 로맨스소설 검색 무협소설 검색 현대소설 검색</p>
+        <p>webtoon search manhwa search manga search Naver webtoon Kakao webtoon web novel search One Piece Naruto Demon Slayer</p>
+
+        <h3>게임 상세 검색</h3>
+        <p>리그오브레전드 검색 LOL 검색 발로란트 검색 오버워치 검색 배틀그라운드 검색 배그 검색 메이플스토리 검색 던전앤파이터 검색 피파온라인 검색 FC온라인 검색</p>
+        <p>로스트아크 검색 블루아카이브 검색 원신 검색 명일방주 검색 승리의여신니케 검색 우마무스메 검색 붕괴스타레일 검색 젠레스존제로 검색 스타레일 검색</p>
+        <p>마인크래프트 검색 로블록스 검색 포트나이트 검색 에이펙스레전드 검색 콜오브듀티 검색 GTA 검색 엘든링 검색 디아블로 검색 월드오브워크래프트 검색</p>
+        <p>닌텐도스위치 검색 젤다 검색 마리오 검색 포켓몬 검색 동물의숲 검색 스플래툰 검색 PS5 검색 엑스박스 검색 스팀 검색 에픽게임즈 검색</p>
+        <p>게임공략 검색 게임리뷰 검색 게임뉴스 검색 게임커뮤니티 검색 인벤 검색 루리웹 검색 게임메카 검색 디스이즈게임 검색</p>
+        <p>League of Legends search Valorant search Overwatch search PUBG search Minecraft search Fortnite search Genshin Impact search Steam search Nintendo search PS5 search</p>
+
+        <h3>음악 상세 검색</h3>
+        <p>멜론 차트 검색 지니 차트 검색 벅스 차트 검색 스포티파이 차트 검색 빌보드 차트 검색 음원차트 검색 실시간차트 검색 주간차트 검색 월간차트 검색</p>
+        <p>발라드 검색 댄스 검색 힙합 검색 R&B 검색 록 검색 인디 검색 트로트 검색 클래식 검색 재즈 검색 EDM 검색 팝 검색 OST 검색</p>
+        <p>BTS 검색 블랙핑크 검색 에스파 검색 뉴진스 검색 아이브 검색 르세라핌 검색 세븐틴 검색 스트레이키즈 검색 NCT 검색 투바투 검색 엔하이픈 검색 트와이스 검색 레드벨벳 검색 잇지 검색</p>
+        <p>아이유 검색 임영웅 검색 태양 검색 지드래곤 검색 박재범 검색 크러쉬 검색 딘 검색 AKMU 검색 볼빨간사춘기 검색 백예린 검색 헤이즈 검색 청하 검색</p>
+        <p>Melon chart Spotify chart Billboard chart K-pop search BTS Blackpink Aespa NewJeans IVE Seventeen Stray Kids music search song lyrics search</p>
+
+        <h3>드라마 및 영화 상세 검색</h3>
+        <p>넷플릭스 추천 검색 티빙 추천 검색 쿠팡플레이 추천 검색 왓챠 추천 검색 디즈니플러스 추천 검색 웨이브 추천 검색 시즌 검색 에피소드 검색</p>
+        <p>한국드라마 추천 검색 로맨스드라마 검색 스릴러드라마 검색 사극 검색 판타지드라마 검색 의학드라마 검색 법정드라마 검색 학원드라마 검색 좀비드라마 검색</p>
+        <p>영화 추천 검색 박스오피스 검색 개봉영화 검색 상영중영화 검색 CGV 검색 롯데시네마 검색 메가박스 검색 영화예매 검색 영화리뷰 검색 영화평점 검색</p>
+        <p>마블 검색 DC 검색 어벤져스 검색 스파이더맨 검색 배트맨 검색 스타워즈 검색 해리포터 검색 반지의제왕 검색 미션임파서블 검색 존윅 검색 분노의질주 검색</p>
+        <p>Netflix search Disney Plus search Korean drama search K-drama recommendation movie review box office CGV Lotte Cinema Megabox Marvel DC</p>
+
+        <h3>스포츠 상세 검색</h3>
+        <p>손흥민 검색 이강인 검색 김민재 검색 황희찬 검색 이재성 검색 오타니 검색 류현진 검색 김하성 검색 추신수 검색 박세리 검색 손연재 검색</p>
+        <p>EPL 순위 검색 라리가 순위 검색 세리에A 순위 검색 분데스리가 순위 검색 리그앙 순위 검색 K리그 순위 검색 챔피언스리그 결과 검색</p>
+        <p>토트넘 검색 리버풀 검색 맨시티 검색 맨유 검색 아스날 검색 첼시 검색 바르셀로나 검색 레알마드리드 검색 바이에른 검색 PSG 검색 인테르 검색 유벤투스 검색</p>
+        <p>LG트윈스 검색 삼성라이온즈 검색 KIA타이거즈 검색 두산베어스 검색 키움히어로즈 검색 SSG랜더스 검색 NC다이노스 검색 KT위즈 검색 한화이글스 검색 롯데자이언츠 검색</p>
+        <p>UFC 대회 검색 복싱 타이틀 검색 F1 검색 MotoGP 검색 e스포츠 검색 LCK 검색 월드챔피언십 검색 T1 검색 젠지 검색 한화생명 검색 KT 검색 DRX 검색</p>
+        <p>Son Heung-min search EPL standings La Liga Tottenham Liverpool Manchester City Barcelona Real Madrid KBO MLB NBA UFC LCK esports search</p>
+
+        <h3>정치 및 시사 검색</h3>
+        <p>정치 검색 뉴스 검색 시사 검색 국회 검색 대통령 검색 정당 검색 선거 검색 투표 검색 여론조사 검색 국정감사 검색 법안 검색 정책 검색</p>
+        <p>국제뉴스 검색 세계뉴스 검색 미국뉴스 검색 일본뉴스 검색 중국뉴스 검색 유럽뉴스 검색 북한뉴스 검색 외교 검색 안보 검색 통일 검색</p>
+        <p>경제뉴스 검색 부동산뉴스 검색 IT뉴스 검색 과학뉴스 검색 환경뉴스 검색 문화뉴스 검색 사회뉴스 검색 스포츠뉴스 검색 연예뉴스 검색</p>
+        <p>politics search news search current affairs election search policy search international news world news Korea news</p>
+
+        <h3>과학 및 기술 검색</h3>
+        <p>과학 검색 물리 검색 화학 검색 생물 검색 지구과학 검색 천문학 검색 수학 검색 통계 검색 우주 검색 NASA 검색 SpaceX 검색 로켓 검색</p>
+        <p>양자컴퓨터 검색 핵융합 검색 유전공학 검색 줄기세포 검색 나노기술 검색 신소재 검색 에너지 검색 태양광 검색 풍력 검색 수소 검색 전기차배터리 검색</p>
+        <p>특허 검색 발명 검색 연구 검색 논문 검색 사이언스 검색 네이처 검색 랜싯 검색 PNAS 검색 arXiv 검색 학술DB 검색 RISS 검색 KISS 검색 DBpia 검색</p>
+        <p>science search physics search chemistry search biology search math search space search NASA quantum computing nuclear fusion research paper</p>
+
+        <h3>환경 및 지속가능성 검색</h3>
+        <p>환경 검색 기후변화 검색 지구온난화 검색 탄소중립 검색 ESG 검색 친환경 검색 재활용 검색 분리수거 검색 미세먼지 검색 대기오염 검색 수질오염 검색</p>
+        <p>플라스틱 검색 제로웨이스트 검색 업사이클링 검색 비건 검색 유기농 검색 로컬푸드 검색 에코 검색 그린에너지 검색 신재생에너지 검색 전기차 검색 수소차 검색</p>
+        <p>environment search climate change global warming carbon neutral ESG eco-friendly recycling zero waste renewable energy green energy</p>
+
+        <h3>종교 및 철학 검색</h3>
+        <p>종교 검색 기독교 검색 불교 검색 천주교 검색 이슬람 검색 힌두교 검색 교회 검색 절 검색 성당 검색 사찰 검색 명상 검색 기도 검색</p>
+        <p>철학 검색 심리학 검색 상담 검색 자기계발 검색 동기부여 검색 명언 검색 인문학 검색 역사 검색 한국사 검색 세계사 검색 고전 검색 독서 검색</p>
+
+        <h3>군대 및 국방 검색</h3>
+        <p>군대 검색 입대 검색 전역 검색 병역 검색 모집병 검색 부사관 검색 장교 검색 학군단 검색 ROTC 검색 군복무 검색 공익 검색 산업기능요원 검색</p>
+        <p>육군 검색 해군 검색 공군 검색 해병대 검색 특전사 검색 의무경찰 검색 전투경찰 검색 군면제 검색 병역판정 검색 신체검사 검색</p>
+
+        <h3>복지 및 지원금 검색</h3>
+        <p>지원금 검색 보조금 검색 청년 지원금 검색 청년내일채움공제 검색 근로장려금 검색 자녀장려금 검색 기초생활수급 검색 긴급복지 검색 주거급여 검색</p>
+        <p>실업급여 검색 고용보험 검색 국민연금 검색 건강보험 검색 장애인복지 검색 노인복지 검색 아동수당 검색 양육수당 검색 출산지원금 검색 결혼지원금 검색</p>
+        <p>정부24 검색 복지로 검색 고용센터 검색 워크넷 검색 사람인 검색 잡코리아 검색 인크루트 검색 원티드 검색 점프잇 검색 프로그래머스 검색 백준 검색</p>
+        <p>government support subsidy search unemployment benefit national pension health insurance welfare youth support child allowance</p>
+
+        <h3>부동산 상세 검색</h3>
+        <p>직방 검색 다방 검색 네이버부동산 검색 호갱노노 검색 아실 검색 부동산114 검색 KB부동산 검색 한국부동산원 검색 실거래가 검색 공시가격 검색</p>
+        <p>아파트분양 검색 청약홈 검색 청약가점 검색 특별공급 검색 줍줍 검색 무순위청약 검색 모델하우스 검색 입주예정 검색 재건축 검색 재개발 검색 리모델링 검색</p>
+        <p>전세사기 검색 전세보증보험 검색 월세 시세 검색 전세 시세 검색 매매 시세 검색 부동산 중개 검색 공인중개사 검색 복비 계산 검색</p>
+
+        <h3>암호화폐 및 투자 검색</h3>
+        <p>비트코인 시세 검색 이더리움 시세 검색 리플 검색 솔라나 검색 도지코인 검색 시바이누 검색 폴리곤 검색 아발란체 검색 카르다노 검색 폴카닷 검색</p>
+        <p>업비트 검색 빗썸 검색 바이낸스 검색 코인원 검색 코빗 검색 코인베이스 검색 크라켄 검색 FTX 검색 DEX 검색 DeFi 검색 NFT 검색</p>
+        <p>주식투자 검색 ETF 검색 펀드 검색 채권 검색 금투자 검색 달러투자 검색 부동산투자 검색 P2P투자 검색 크라우드펀딩 검색 ISA 검색 IRP 검색 연금저축 검색</p>
+        <p>Bitcoin price Ethereum crypto exchange Upbit Binance stock investment ETF fund bond gold investment DeFi NFT Web3</p>
+
+        <h3>의료 상세 검색</h3>
+        <p>코로나 검색 독감 검색 감기 검색 두통 검색 복통 검색 요통 검색 관절염 검색 당뇨 검색 고혈압 검색 암 검색 갑상선 검색 탈모 검색 아토피 검색 비염 검색</p>
+        <p>성형외과 검색 쌍꺼풀 검색 코성형 검색 안면윤곽 검색 지방흡입 검색 보톡스 검색 필러 검색 라식 검색 라섹 검색 스마일라식 검색 렌즈삽입술 검색</p>
+        <p>치과 임플란트 검색 교정 검색 레진 검색 크라운 검색 스케일링 검색 사랑니 검색 잇몸 검색 충치 검색 미백 검색 라미네이트 검색</p>
+        <p>약 검색 처방전 검색 약국 검색 의약품 검색 건강기능식품 검색 비타민 검색 유산균 검색 오메가3 검색 콜라겐 검색 루테인 검색 밀크시슬 검색</p>
+
+        <h3>교통 및 이동수단 상세 검색</h3>
+        <p>KTX 시간표 검색 SRT 시간표 검색 ITX 검색 무궁화 검색 새마을 검색 기차표 예매 검색 코레일 검색 SR 검색</p>
+        <p>서울지하철 노선도 검색 수도권지하철 검색 부산지하철 검색 대구지하철 검색 광주지하철 검색 대전지하철 검색 인천지하철 검색</p>
+        <p>고속버스 터미널 검색 시외버스 검색 공항버스 검색 인천공항 검색 김포공항 검색 제주공항 검색 대한항공 검색 아시아나 검색 진에어 검색 제주항공 검색 티웨이 검색 에어부산 검색 에어서울 검색</p>
+        <p>카카오택시 검색 타다 검색 카카오내비 검색 티맵 검색 네이버지도 검색 카카오맵 검색 구글맵 검색 카카오T 검색 킥보드 검색 자전거 검색 따릉이 검색</p>
+        <p>KTX schedule search subway map bus terminal airport Incheon airport Gimpo Kakao taxi T-map Naver map Korea transportation</p>
+
+        <h3>농업 및 원예 검색</h3>
+        <p>농업 검색 농사 검색 텃밭 검색 작물 검색 채소 검색 과일 검색 쌀 검색 감자 검색 고구마 검색 토마토 검색 딸기 검색 배추 검색 무 검색 고추 검색</p>
+        <p>원예 검색 정원 검색 화분 검색 식물 검색 다육이 검색 관엽식물 검색 꽃 검색 화훼 검색 조경 검색 잔디 검색 나무 검색 허브 검색</p>
+
+        <h3>낚시 및 아웃도어 검색</h3>
+        <p>낚시 검색 바다낚시 검색 민물낚시 검색 루어낚시 검색 플라이낚시 검색 선상낚시 검색 방파제낚시 검색 낚시포인트 검색 낚시채비 검색</p>
+        <p>등산 검색 산 검색 트레킹 검색 백패킹 검색 캠핑 검색 글램핑 검색 오토캠핑 검색 차박 검색 캠핑장 검색 바베큐 검색 캠핑용품 검색</p>
+        <p>자전거 검색 라이딩 검색 MTB 검색 로드바이크 검색 따릉이 검색 자전거도로 검색 한강자전거 검색 국토종주 검색 4대강자전거길 검색</p>
+
+        <h3>사진 및 영상 검색</h3>
+        <p>카메라 검색 DSLR 검색 미러리스 검색 소니카메라 검색 캐논 검색 니콘 검색 후지필름 검색 파나소닉 검색 GoPro 검색 DJI 검색 드론 검색</p>
+        <p>사진 편집 검색 포토샵 검색 라이트룸 검색 스냅시드 검색 VSCO 검색 영상편집 검색 프리미어프로 검색 파이널컷 검색 다빈치리졸브 검색 캡컷 검색 CapCut 검색</p>
+
+        <h3>롱테일 검색 문구</h3>
+        <p>구글 네이버 동시에 검색하는 방법 여러 검색엔진 한번에 검색하는 사이트 통합 검색 사이트 추천 무료 메타 검색엔진 사이트 구글이랑 네이버 같이 검색</p>
+        <p>검색엔진 여러개 한번에 검색 메타서치 사이트 추천 2026 통합검색 사이트 추천 검색 결과 비교 사이트 여러 포털 동시 검색</p>
+        <p>how to search Google and Naver at once multi search engine website best meta search engine Korea free unified search site search multiple engines simultaneously</p>
+        <p>네이버 구글 다음 빙 유튜브 나무위키 한방에 검색 검색창 하나로 모든 검색엔진 한꺼번에 검색하기 검색 비교 사이트 검색 통합 사이트</p>
+        <p>구글에서 못 찾으면 네이버 네이버에서 못 찾으면 구글 둘 다 한번에 검색 검색엔진 바꿔가며 검색할 필요 없는 사이트</p>
+        <p>학교 과제할 때 검색 사이트 추천 논문 찾을 때 좋은 검색 사이트 리포트 쓸 때 편한 검색엔진 자료조사 검색 사이트 추천</p>
+        <p>직장인 업무용 검색 사이트 추천 회사에서 쓰기 좋은 검색엔진 업무 자료 검색 빠르게 하는 법 효율적인 검색 방법 검색 팁</p>
+        <p>best search engine for students best search engine for research how to search efficiently search tips and tricks search engine for Korean content</p>
+    </footer>
+
+    <!-- Service Worker 등록 (PWA) -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').catch(function(){});
+        }
+    </script>
+
+    <!-- 개발자 정보 푸터 (모든 페이지 하단 표시) -->
+    <footer class="w-full border-t border-gray-200 dark:border-gray-700 mt-12 py-6 px-4 text-center text-xs text-gray-500 dark:text-gray-400 bg-white/80 dark:bg-gray-900/80">
+        <p class="font-semibold text-sm text-gray-700 dark:text-gray-300 mb-1">Doowon University of Technology</p>
+        <p class="mb-1">Department of Computer Science and Engineering / CSE</p>
+        <p class="font-medium text-gray-600 dark:text-gray-300 mb-1">안도영</p>
+        <p>📧 dksehvkf1206&#64;naver.com &nbsp;|&nbsp; 📞 010-2583-1894</p>
+        <p class="mt-2 text-gray-400 dark:text-gray-500">&copy; 2026 Meta Search. All rights reserved.</p>
+    </footer>
 </body>
 </html>

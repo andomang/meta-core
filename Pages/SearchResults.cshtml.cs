@@ -7,7 +7,7 @@ using MetaSearch.Models;
 namespace MetaSearch.Pages;
 
 /// <summary>
-/// 검색 결과 페이지 — 3개 엔진 병렬 크롤링 + RRF 결합 + AI 분류·재정렬·관련검색어.
+/// 검색 결과 페이지 — 4개 엔진 병렬 크롤링 + RRF 결합 + AI 분류·재정렬·관련검색어.
 /// 클라이언트 JS에서 batch 2+ 추가 로드, 이미지 enrichment, extraPanel 렌더링 수행.
 /// </summary>
 public class SearchResultsModel : PageModel
@@ -21,17 +21,19 @@ public class SearchResultsModel : PageModel
     private readonly Services.BraveCrawler _brave;
     private readonly Services.ClaudeApi _ai;
     private readonly Services.ExtraApi _extra;
+    private readonly IHttpClientFactory _httpFactory;
     public readonly Services.Lang Lang;
 
     public SearchResultsModel(
         Services.DbService db, Services.SearchDao searchDao, Services.MemberDao memberDao,
         Services.GoogleCrawler google, Services.NaverCrawler naver, Services.DaumCrawler daum,
         Services.BraveCrawler brave,
-        Services.ClaudeApi ai, Services.ExtraApi extra, Services.Lang lang)
+        Services.ClaudeApi ai, Services.ExtraApi extra, Services.Lang lang,
+        IHttpClientFactory httpFactory)
     {
         _db = db; _searchDao = searchDao; _memberDao = memberDao;
         _google = google; _naver = naver; _daum = daum; _brave = brave;
-        _ai = ai; _extra = extra; Lang = lang;
+        _ai = ai; _extra = extra; Lang = lang; _httpFactory = httpFactory;
     }
 
     // 뷰 바인딩 데이터 (JSON으로 클라이언트에 전달)
@@ -91,24 +93,26 @@ public class SearchResultsModel : PageModel
 
         if (uid != null)
         {
-            var (gs, ns, ds) = _memberDao.GetEngineScores(uid);
+            var (gs, ns, ds, bs) = _memberDao.GetEngineScores(uid);
 
-            // 사용자 DB 점수 + SearchScoreTable 키워드 점수 합산
+            // 사용자 DB 점수 + SearchScoreTable 키워드 점수 합산 (4엔진)
             var keywordScores = Services.SearchScoreTable.GetScores(Keyword);
-            gs += keywordScores[0]; ns += keywordScores[1]; ds += keywordScores[2];
+            gs += keywordScores[0]; ns += keywordScores[1]; ds += keywordScores[2]; bs += keywordScores[3];
 
-            double total = gs + ns + ds;
+            double total = gs + ns + ds + bs;
             if (total > 0)
             {
                 // 개인화 가중치를 기본 가중치에 곱해서 적용 (0~3 범위 유지)
                 gWeight = gWeight * (gs / total * 3);
                 nWeight = nWeight * (ns / total * 3);
                 dWeight = dWeight * (ds / total * 3);
+                if (bWeight > 0) bWeight = bWeight * (bs / total * 3);
 
                 // 최솟값 보정 (한 엔진이 0점이 되지 않도록)
                 gWeight = Math.Max(gWeight, 0.3);
                 nWeight = Math.Max(nWeight, 0.3);
                 dWeight = Math.Max(dWeight, 0.3);
+                if (bWeight > 0) bWeight = Math.Max(bWeight, 0.3);
             }
         }
 
@@ -175,9 +179,9 @@ public class SearchResultsModel : PageModel
         {
             _searchDao.AddSearchHistory(uid, Query, Keyword);
 
-            // 키워드별 엔진 점수 델타
+            // 키워드별 엔진 점수 델타 (4엔진)
             var delta = Services.SearchScoreTable.GetScores(Keyword);
-            _memberDao.ApplyEngineScore(uid, delta[0], delta[1], delta[2]);
+            _memberDao.ApplyEngineScore(uid, delta[0], delta[1], delta[2], delta[3]);
         }
 
         // ── 5단계: 사이드바 인기 검색어 ──
@@ -244,11 +248,11 @@ public class SearchResultsModel : PageModel
         string? uid = HttpContext.Session.GetString("UserID");
         if (uid == null) return new JsonResult(new { result = "ok" });
         string id = Request.Query["id"].ToString();
-        if (!string.IsNullOrEmpty(id))
+        // int.TryParse로 비정상 입력 시 예외 방지 (SQL 인젝션 이중 방어)
+        if (!string.IsNullOrEmpty(id) && int.TryParse(id, out int no))
         {
             using var conn = _db.OpenConnection();
-            // PK 컬럼명은 no (id 아님) — GetRecentSearches에서 MAX(no) AS id로 반환
-            conn.Execute("DELETE FROM searchhistory WHERE no=@no AND userid=@uid", new { no = int.Parse(id), uid });
+            conn.Execute("DELETE FROM searchhistory WHERE no=@no AND userid=@uid", new { no, uid });
         }
         return new JsonResult(new { result = "ok" });
     }
@@ -259,5 +263,32 @@ public class SearchResultsModel : PageModel
         if (string.IsNullOrWhiteSpace(q)) return new JsonResult(Array.Empty<string>());
         var items = _searchDao.GetSuggestions(q.Trim());
         return new JsonResult(items);
+    }
+
+    /// <summary>OG 이미지 enrichment (AJAX) — URL에서 og:image 메타태그 추출</summary>
+    public async Task<IActionResult> OnGetEnrichAsync(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return new JsonResult(new { img = "" });
+        try
+        {
+            var client = _httpFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(4);
+            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent",
+                "Mozilla/5.0 (compatible; MetaSearch/1.0)");
+
+            var html = await client.GetStringAsync(url);
+
+            // og:image 두 가지 속성 순서 모두 처리
+            var m = System.Text.RegularExpressions.Regex.Match(html,
+                @"<meta[^>]+property=[""']og:image[""'][^>]+content=[""']([^""']+)[""']",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (!m.Success)
+                m = System.Text.RegularExpressions.Regex.Match(html,
+                    @"<meta[^>]+content=[""']([^""']+)[""'][^>]+property=[""']og:image[""']",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            return new JsonResult(new { img = m.Success ? m.Groups[1].Value : "" });
+        }
+        catch { return new JsonResult(new { img = "" }); }
     }
 }

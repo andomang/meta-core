@@ -54,6 +54,7 @@ public class DaumCrawler
             request.Headers.Add("Authorization", "KakaoAK " + _apiKey);
 
             var response = await client.SendAsync(request);
+            if (!response.IsSuccessStatusCode) return results;
             var json = await response.Content.ReadAsStringAsync();
 
             using var doc = JsonDocument.Parse(json);

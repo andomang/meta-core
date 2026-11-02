@@ -263,7 +263,7 @@ tr:hover td{background:var(--s2)}
 <div id="loading">
   <div style="text-align:center">
     <div class="ld-title">메타검색 성능 평가 중 <em>…</em></div>
-    <div class="ld-sub">Google · Naver · Daum · RRF 4개 방식을 AI가 객관적으로 비교합니다</div>
+    <div class="ld-sub">Google · Naver · Daum · Brave · RRF 5개 방식을 AI가 객관적으로 비교합니다</div>
   </div>
   <div class="progress-bar"><div class="progress-fill" id="pf"></div></div>
   <div class="ld-msg" id="ldmsg">준비 중…</div>
@@ -271,7 +271,7 @@ tr:hover td{background:var(--s2)}
     <div class="ld-step" id="s1">60개 테스트셋에서 20개 랜덤 선정</div>
     <div class="ld-step" id="s2">Google · Naver · Daum 병렬 검색</div>
     <div class="ld-step" id="s3">중복 제거 및 URL 풀 구성</div>
-    <div class="ld-step" id="s4">AI 관련성 레이블링 (Groq Qwen3)</div>
+    <div class="ld-step" id="s4">AI 관련성 레이블링 (Groq GPT-oss 120B)</div>
     <div class="ld-step" id="s5">nDCG · MRR · P@5 지표 계산</div>
   </div>
 </div>
@@ -288,7 +288,7 @@ tr:hover td{background:var(--s2)}
 
 <div class="hdr">
   <div class="hdr-eye">메타검색 엔진 · 객관적 성능 평가</div>
-  <h1 class="hdr-title">Google + Naver + Daum <em>RRF 통합</em>이 단일 엔진보다 나을까?</h1>
+  <h1 class="hdr-title">Google + Naver + Daum + Brave <em>RRF 통합</em>이 단일 엔진보다 나을까?</h1>
   <p class="hdr-desc">네 검색엔진의 결과를 AI 알고리즘(RRF)으로 통합하면 단일 엔진보다 더 좋은 검색 결과를 제공하는지 LLM을 레이블러로 삼아 nDCG·MRR·P@5 지표로 객관 측정했습니다.</p>
   <div class="hdr-pills">
     <span class="pill g">Google (Serper.dev)</span>
@@ -324,7 +324,7 @@ tr:hover td{background:var(--s2)}
         <div class="ri"><span class="ri-rk">3</span><span class="tag n">N</span><span class="ri-txt">무신사 (N3+D3)</span><span class="ri-sc">0.0308</span></div>
       </div>
       <div class="fbox">
-        <code>score = Σ w/(60+rank)  (한국어: 네이버 w=1.4)</code>
+        <code>score = Σ w/(60+rank)  (모든 엔진 w=1.0, 사용자 개인화로 조정)</code>
         <p>여러 엔진 모두 상위에 오른 결과는 점수가 더 높아짐</p>
       </div>
       <div class="hbox ok">✅ 3개 엔진의 장점을 모두 반영, 한국어 쿼리는 네이버 우선</div>
@@ -378,7 +378,7 @@ tr:hover td{background:var(--s2)}
 <div class="improve-card">
   <div class="imp-title">RRF가 단일 엔진 대비 얼마나 개선됐나? (nDCG@10 기준)</div>
   <div id="improve-rows"></div>
-  <p style="font-size:11px;color:var(--mu);margin:0">* RRF = 3엔진 통합. 단일 엔진보다 커버리지와 합의도 면에서 우위.</p>
+  <p style="font-size:11px;color:var(--mu);margin:0">* RRF = 4엔진 통합. 단일 엔진보다 커버리지와 합의도 면에서 우위.</p>
 </div>
 
 <!-- 논문 카드 #3: MRR + P@5 -->
@@ -433,7 +433,7 @@ tr:hover td{background:var(--s2)}
     기존에는 검색 결과의 관련성을 <strong>사람이 직접 하나하나 평가</strong>해야 했습니다(이를 "레이블링"이라 함).
     하지만 수백 개의 결과를 매번 사람이 평가하면 비용이 막대합니다.
     2023년 연구들은 GPT-4 같은 대형 언어 모델(LLM)이 사람 평가자와 <strong>80% 이상의 일치율</strong>을 보인다는 것을 발표했습니다.
-    메타서치는 이 연구를 바탕으로 <strong>Groq의 Qwen3 모델</strong>을 레이블러로 활용해,
+    메타서치는 이 연구를 바탕으로 <strong>Groq의 GPT-oss 120B 모델</strong>을 레이블러로 활용해,
     각 검색 결과를 0(무관련) · 1(부분관련) · 2(매우관련)으로 자동 채점합니다.
     이를 통해 사람 평가자 없이도 신뢰할 수 있는 검색 품질 측정이 가능해졌습니다.
   </p>
@@ -455,8 +455,8 @@ tr:hover td{background:var(--s2)}
 /* 로딩 애니메이션 */
 var STEPS = [
   // 10쿼리 × 4초 딜레이 = 약 50초 목표
-  {id:'s1',pct:3,  msg:'10개 테스트 쿼리 준비 중…',          delay:800},
-  {id:'s2',pct:20, msg:'Google · Naver · Daum 병렬 검색 중…',delay:10000},
+  {id:'s1',pct:3,  msg:'20개 테스트 쿼리 준비 중…',                  delay:800},
+  {id:'s2',pct:20, msg:'Google · Naver · Daum · Brave 병렬 검색 중…',delay:10000},
   {id:'s3',pct:40, msg:'URL 풀 구성 및 중복 제거 중…',       delay:10000},
   {id:'s4',pct:75, msg:'AI 관련성 채점 중… (약 40~50초 소요)',delay:25000},
   {id:'s5',pct:92, msg:'지표 계산 및 집계 중…',              delay:8000}
@@ -548,7 +548,7 @@ function render(data) {
   if (hasBrave) engines.splice(3, 0, {k:'b',name:'Brave', ndcg:agg.nDCG10.Brave, mrr:agg.MRR.Brave, p5:agg.P5.Brave});
   var sorted = engines.slice().sort(function(a,b){return b.ndcg-a.ndcg;});
   sorted.forEach(function(e,i){e.rank=i+1;});
-  var rankLabels = ['','1위 🥇','2위 🥈','3위 🥉','4위'];
+  var rankLabels = ['','1위 🥇','2위 🥈','3위 🥉','4위','5위'];
   var tc = document.getElementById('tiles');
   engines.forEach(function(e) {
     var rc = e.rank===1?'gold':e.rank===2?'silver':e.rank===3?'bronze':'';
@@ -653,15 +653,15 @@ function render(data) {
     '<div class="fin-d">세 엔진 합의 기반 재정렬로 신뢰도 높은 결과를 상위에 배치. 커버리지도 더 넓음.</div></div>' +
     '<div class="fin purple"><div class="fin-n">발견 #2</div>' +
     '<div class="fin-t">RRF는 "합의된" 결과를 우선 보여줍니다</div>' +
-    '<div class="fin-v">3엔진 교차 검증</div>' +
+    '<div class="fin-v">4엔진 교차 검증</div>' +
     '<div class="fin-d">여러 엔진 모두 상위에 오른 결과 = 더 신뢰할 수 있는 결과. 단일 엔진은 이 교차 검증이 불가능.</div></div>' +
     '<div class="fin blue"><div class="fin-n">발견 #3</div>' +
-    '<div class="fin-t">한국어 쿼리는 네이버 가중치 1.4 적용</div>' +
+    '<div class="fin-t">모든 엔진 동등 가중치 · 개인화로 조정</div>' +
     '<div class="fin-v">Google '+agg.nDCG10.Google.toFixed(4)+'</div>' +
-    '<div class="fin-d">한국어 쿼리 감지 시 네이버 RRF 가중치를 1.4로 높여 국내 검색 품질을 강화했습니다.</div></div>';
+    '<div class="fin-d">4개 엔진 모두 w=1.0으로 동등 출발. 사용자 클릭 패턴이 쌓이면 개인화 가중치가 자동 조정됩니다.</div></div>';
 
   document.getElementById('footnote').innerHTML =
-    '* 관련성 레이블: Groq (qwen/qwen3.8-27b)가 각 결과를 0(무관련)·1(부분관련)·2(매우관련)으로 자동 평가. ' +
+    '* 관련성 레이블: Groq (openai/gpt-oss-120b)가 각 결과를 0(무관련)·1(부분관련)·2(매우관련)으로 자동 평가. ' +
     zeros+'개 쿼리는 AI 레이블러 응답 실패로 0점 처리됨 (결과 품질과 무관). ' +
     '평가 대상: 쇼핑·국내뉴스·IT기술·국내장소·게임·스포츠·의료건강·차량·맛집·해외뉴스 10개 카테고리.';
 }

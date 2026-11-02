@@ -16,6 +16,7 @@ public class ExtraApi
     private readonly string _kakaoKey;
     private readonly string _youtubeKey;
     private readonly string _weatherKey;
+    private readonly string _serperKey;
 
     public ExtraApi(IHttpClientFactory httpFactory, IConfiguration config)
     {
@@ -25,6 +26,7 @@ public class ExtraApi
         _kakaoKey = config["ApiKeys:KakaoApiKey"] ?? "";
         _youtubeKey = config["ApiKeys:YouTubeApiKey"] ?? "";
         _weatherKey = config["ApiKeys:WeatherApiKey"] ?? "";
+        _serperKey = config["ApiKeys:SerperApiKey"] ?? "";
     }
 
     /// <summary>검색어+키워드에 맞는 외부 API 결과를 JSON으로 반환</summary>
@@ -44,6 +46,27 @@ public class ExtraApi
                 "해외장소" => await GetWeatherOrWikiAsync(query),
                 "해외맛집" or "해외뉴스" or "의료건강" => await GetWikipediaAsync(query),
                 "일반" => await GetNaverBlogAsync(query),
+                _ => "{}"
+            };
+        }
+        catch { return "{}"; }
+    }
+
+    /// <summary>타입 지정으로 개별 외부 API 호출</summary>
+    public async Task<string> GetExtraByTypeAsync(string query, string type)
+    {
+        try
+        {
+            return type switch
+            {
+                "places"   => await GetKakaoPlacesAsync(query),
+                "shopping" => await GetNaverShoppingAsync(query),
+                "news"     => await GetNaverNewsAsync(query),
+                "blog"     => await GetNaverBlogAsync(query),
+                "youtube"  => await GetYoutubeAsync(query),
+                "wiki"     => await GetWikipediaAsync(query),
+                "weather"  => await GetWeatherOrWikiAsync(query),
+                "exchange" => await GetExchangeRateAsync(),
                 _ => "{}"
             };
         }
@@ -94,28 +117,35 @@ public class ExtraApi
     }
 
     // ── 네이버 쇼핑 API ──
+    // Serper Shopping API (네이버 쇼핑 API 폐지로 대체)
     private async Task<string> GetNaverShoppingAsync(string query)
     {
-        string url = $"https://openapi.naver.com/v1/search/shop.json?query={Uri.EscapeDataString(query)}&display=6&sort=sim";
-        string json = await HttpGetWithNaverAsync(url);
-        if (string.IsNullOrEmpty(json)) return "{}";
-
         try
         {
+            var client = _httpFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(8);
+            var request = new HttpRequestMessage(HttpMethod.Post, "https://google.serper.dev/shopping");
+            request.Headers.Add("X-API-KEY", _serperKey);
+            request.Content = new StringContent(
+                JsonSerializer.Serialize(new { q = query, gl = "kr", hl = "ko", num = 6 }),
+                System.Text.Encoding.UTF8, "application/json");
+            var response = await client.SendAsync(request);
+            if (!response.IsSuccessStatusCode) return "{}";
+            string json = await response.Content.ReadAsStringAsync();
+
             using var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.TryGetProperty("items", out var raw)) return "{}";
+            if (!doc.RootElement.TryGetProperty("shopping", out var raw)) return "{}";
 
             var items = new List<object>();
             foreach (var item in raw.EnumerateArray())
             {
-                string price = item.GetPropertyOrDefault("lprice");
-                if (price == "0") price = "";
+                if (items.Count >= 6) break;
                 items.Add(new
                 {
-                    title = StripHtml(item.GetPropertyOrDefault("title")),
-                    price,
-                    mall = item.GetPropertyOrDefault("mallName"),
-                    image = item.GetPropertyOrDefault("image"),
+                    title = item.GetPropertyOrDefault("title"),
+                    price = item.GetPropertyOrDefault("price"),
+                    mall = item.GetPropertyOrDefault("source"),
+                    image = item.GetPropertyOrDefault("imageUrl"),
                     link = item.GetPropertyOrDefault("link")
                 });
             }
@@ -359,32 +389,38 @@ public class ExtraApi
     }
 
     // ── HTTP 헬퍼 ──
+    // 범용 HTTP GET — User-Agent 필수(위키피디아 등 UA 없으면 거부)
     private async Task<string> HttpGetAsync(string url, string authHeader = null)
     {
         try
         {
             var client = _httpFactory.CreateClient();
-            client.Timeout = TimeSpan.FromSeconds(5);
+            client.Timeout = TimeSpan.FromSeconds(8);
             var request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.Add("Accept-Language", "ko-KR,ko;q=0.9,en;q=0.8");
+            request.Headers.Add("User-Agent", "MetaSearch/1.0 (https://metasearch.kro.kr)");
             if (!string.IsNullOrEmpty(authHeader))
                 request.Headers.Add("Authorization", authHeader);
             var response = await client.SendAsync(request);
+            if (!response.IsSuccessStatusCode) return "";
             return await response.Content.ReadAsStringAsync();
         }
         catch { return ""; }
     }
 
+    // 네이버 API 전용 GET — 인증 헤더 포함
     private async Task<string> HttpGetWithNaverAsync(string url)
     {
         try
         {
             var client = _httpFactory.CreateClient();
-            client.Timeout = TimeSpan.FromSeconds(5);
+            client.Timeout = TimeSpan.FromSeconds(8);
             var request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.Add("X-Naver-Client-Id", _naverId);
             request.Headers.Add("X-Naver-Client-Secret", _naverSecret);
+            request.Headers.Add("User-Agent", "MetaSearch/1.0");
             var response = await client.SendAsync(request);
+            if (!response.IsSuccessStatusCode) return "";
             return await response.Content.ReadAsStringAsync();
         }
         catch { return ""; }

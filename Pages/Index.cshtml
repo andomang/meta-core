@@ -1,7 +1,12 @@
 ﻿@page
 @model IndexModel
 @{
-    ViewData["Title"] = "홈";
+    ViewData["Title"] = "통합 메타 검색엔진 - 구글 네이버 다음 빙 유튜브 한번에 검색";
+}
+
+@section HeadContent {
+    <!-- 메인 페이지 전용 SEO 메타 -->
+    <meta name="description" content="Meta Search - 구글, 네이버, 다음, 빙, 유튜브, 나무위키를 한 번에 검색하는 대한민국 최고의 무료 통합 메타 검색엔진. AI 추천 검색, 인기검색어 TOP10, 실시간 트렌드, 커뮤니티, 사용자 경험 평가를 제공합니다. 여러 검색엔진 결과를 동시에 비교하고 최적의 정보를 빠르게 찾으세요." />
 }
 
 <!-- 메인 검색 영역 -->
@@ -43,26 +48,109 @@
             </button>
         </div>
 
+        <!-- 자동완성 드롭다운 -->
+        <div id="autocompleteDrop" class="hidden absolute left-0 right-0 top-16 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border dark:border-slate-700 z-[60] overflow-hidden max-h-60 overflow-y-auto">
+        </div>
+
         <!-- 검색 기록 드롭다운 -->
         <div id="historyDrop" class="hidden absolute left-0 right-0 top-16 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border dark:border-slate-700 z-50 overflow-hidden max-h-60 overflow-y-auto">
         </div>
     </div>
 
     <!-- 바로가기 카드 -->
-    <div class="flex gap-4 mt-10">
-        <a href="/Community" class="flex flex-col items-center gap-2 px-6 py-4 bg-white dark:bg-slate-800 rounded-2xl shadow hover:shadow-lg transition-all group">
+    <div class="flex gap-3 mt-10 flex-wrap justify-center">
+        <a href="/Community" class="flex flex-col items-center gap-2 px-5 py-4 bg-white dark:bg-slate-800 rounded-2xl shadow hover:shadow-lg transition-all group">
             <i data-lucide="message-circle" class="w-6 h-6 text-blue-500 group-hover:scale-110 transition-transform"></i>
             <span class="text-xs font-bold dark:text-slate-300">@Model.CommunityText</span>
         </a>
-        <a href="/Settings" class="flex flex-col items-center gap-2 px-6 py-4 bg-white dark:bg-slate-800 rounded-2xl shadow hover:shadow-lg transition-all group">
+        <a href="/Dashboard" class="flex flex-col items-center gap-2 px-5 py-4 bg-white dark:bg-slate-800 rounded-2xl shadow hover:shadow-lg transition-all group">
+            <i data-lucide="layout-dashboard" class="w-6 h-6 text-emerald-500 group-hover:scale-110 transition-transform"></i>
+            <span class="text-xs font-bold dark:text-slate-300">대시보드</span>
+        </a>
+        <a href="/Bookmarks" class="flex flex-col items-center gap-2 px-5 py-4 bg-white dark:bg-slate-800 rounded-2xl shadow hover:shadow-lg transition-all group">
+            <i data-lucide="bookmark" class="w-6 h-6 text-orange-500 group-hover:scale-110 transition-transform"></i>
+            <span class="text-xs font-bold dark:text-slate-300">북마크</span>
+        </a>
+        <a href="/Settings" class="flex flex-col items-center gap-2 px-5 py-4 bg-white dark:bg-slate-800 rounded-2xl shadow hover:shadow-lg transition-all group">
             <i data-lucide="settings" class="w-6 h-6 text-purple-500 group-hover:scale-110 transition-transform"></i>
             <span class="text-xs font-bold dark:text-slate-300">@Model.SettingsText</span>
         </a>
-        <!-- 작동방식 버튼 → 검색 품질 평가 리포트 링크 -->
-        <a href="/EvalReport" class="flex flex-col items-center gap-2 px-6 py-4 bg-white dark:bg-slate-800 rounded-2xl shadow hover:shadow-lg transition-all group">
+        <a href="/EvalReport" class="flex flex-col items-center gap-2 px-5 py-4 bg-white dark:bg-slate-800 rounded-2xl shadow hover:shadow-lg transition-all group">
             <i data-lucide="bar-chart-2" class="w-6 h-6 text-pink-500 group-hover:scale-110 transition-transform"></i>
             <span class="text-xs font-bold dark:text-slate-300">작동방식</span>
         </a>
+    </div>
+
+    <!-- 실시간 인기검색어 TOP 10 -->
+    <div class="mt-12 w-full max-w-2xl">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-slate-700">
+                <h3 class="font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                    <i data-lucide="trending-up" class="w-5 h-5 text-rose-500"></i>
+                    실시간 인기검색어
+                </h3>
+                <span class="text-xs text-gray-400 dark:text-slate-500" id="trendUpdated"></span>
+            </div>
+            <div class="flex flex-col md:flex-row">
+                <!-- 키워드 순위 목록 -->
+                <div class="flex-1 p-4" id="trendList">
+                    <div class="text-sm text-gray-400 dark:text-slate-500 text-center py-6">로딩 중...</div>
+                </div>
+                <!-- 시간대별 검색량 차트 -->
+                <div class="flex-1 p-4 border-t md:border-t-0 md:border-l border-gray-100 dark:border-slate-700">
+                    <div style="position:relative; height:180px;">
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 사용자 경험 평가 버튼 -->
+    <button onclick="openRatingModal()" class="mt-10 flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-slate-800 rounded-full shadow hover:shadow-lg transition-all text-sm text-gray-500 dark:text-slate-400 hover:text-yellow-500 dark:hover:text-yellow-400 border border-gray-200 dark:border-slate-700">
+        <i data-lucide="star" class="w-4 h-4"></i>
+        <span>사용자 경험 평가</span>
+    </button>
+
+    <!-- 평가 결과 (버튼 바로 아래 중앙) -->
+    <div id="reviewSection" class="mt-6 w-full max-w-3xl hidden">
+        <div class="flex items-center justify-center gap-2 mb-3">
+            <div id="avgBadge" class="flex items-center gap-1 px-3 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 rounded-full text-sm font-bold">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                <span id="avgScore">0</span>
+            </div>
+            <span class="text-xs text-gray-400 dark:text-slate-500">(<span id="totalCount">0</span>명 참여)</span>
+        </div>
+        <div id="reviewCards" class="flex justify-center gap-3 flex-wrap max-h-none pb-2" style="scrollbar-width: thin;">
+        </div>
+    </div>
+</div>
+
+<!-- 별점 평가 모달 -->
+<div id="ratingModal" class="hidden fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 p-8 rounded-2xl w-full max-w-sm shadow-2xl text-center">
+        <h3 class="text-xl font-bold mb-2 dark:text-white">서비스 평가</h3>
+        <p class="text-sm text-gray-500 dark:text-slate-400 mb-6">Meta Search 사용 경험을 평가해주세요</p>
+
+        <!-- 별점 -->
+        <div id="starGroup" class="flex justify-center gap-2 mb-6">
+            <button type="button" onclick="setRating(1)" class="star-btn text-gray-300 dark:text-slate-600 hover:text-yellow-400 transition-colors"><svg class="w-10 h-10" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
+            <button type="button" onclick="setRating(2)" class="star-btn text-gray-300 dark:text-slate-600 hover:text-yellow-400 transition-colors"><svg class="w-10 h-10" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
+            <button type="button" onclick="setRating(3)" class="star-btn text-gray-300 dark:text-slate-600 hover:text-yellow-400 transition-colors"><svg class="w-10 h-10" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
+            <button type="button" onclick="setRating(4)" class="star-btn text-gray-300 dark:text-slate-600 hover:text-yellow-400 transition-colors"><svg class="w-10 h-10" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
+            <button type="button" onclick="setRating(5)" class="star-btn text-gray-300 dark:text-slate-600 hover:text-yellow-400 transition-colors"><svg class="w-10 h-10" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
+        </div>
+        <p id="ratingLabel" class="text-sm font-bold text-gray-400 dark:text-slate-500 mb-4"></p>
+
+        <!-- 한줄평 -->
+        <textarea id="ratingComment" rows="2" maxlength="200" placeholder="한줄평을 남겨주세요 (선택)"
+                  class="w-full px-4 py-3 border dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 dark:text-white text-sm outline-none focus:ring-2 focus:ring-yellow-400 resize-none mb-4"></textarea>
+
+        <div class="flex gap-3">
+            <button onclick="submitRating()" id="submitRatingBtn" disabled
+                    class="flex-1 py-3 bg-yellow-500 text-white rounded-xl font-bold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-all">제출</button>
+            <button onclick="closeRatingModal()" class="flex-1 py-3 bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300 rounded-xl font-bold cursor-pointer">닫기</button>
+        </div>
     </div>
 </div>
 
@@ -77,25 +165,112 @@
 </div>
 
 @section Scripts {
+<!-- Chart.js CDN (인기검색어 차트용) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
     // Lucide 아이콘 재초기화
     lucide.createIcons();
 
     var searchInput = document.getElementById('searchInput');
     var historyDrop = document.getElementById('historyDrop');
+    var autocompleteDrop = document.getElementById('autocompleteDrop');
+    var acSelectedIdx = -1; // 자동완성 키보드 선택 인덱스
 
-    // Enter 키 → 검색 실행
+    // ── 자동완성 (디바운스 + 키보드 내비게이션) ──
+    var acTimer = null;
+    searchInput.addEventListener('input', function() {
+        clearTimeout(acTimer);
+        var q = searchInput.value.trim();
+        if (q.length < 1) { autocompleteDrop.classList.add('hidden'); acSelectedIdx = -1; return; }
+        acTimer = setTimeout(function() { fetchAutocomplete(q); }, 250);
+    });
+
+    // 자동완성 데이터 가져오기
+    function fetchAutocomplete(q) {
+        fetch('/api/autocomplete?q=' + encodeURIComponent(q))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.suggestions || data.suggestions.length === 0) {
+                    autocompleteDrop.classList.add('hidden');
+                    acSelectedIdx = -1;
+                    return;
+                }
+                historyDrop.classList.add('hidden');
+                acSelectedIdx = -1;
+                autocompleteDrop.innerHTML = data.suggestions.map(function(s, i) {
+                    return '<div class="ac-item px-4 py-3 hover:bg-blue-50 dark:hover:bg-slate-700 cursor-pointer text-sm dark:text-slate-300 flex items-center gap-2" data-idx="' + i + '" onclick="useAc(\'' + escapeHtml(s) + '\')">'
+                        + '<i data-lucide="search" class="w-3.5 h-3.5 text-gray-400 shrink-0"></i>'
+                        + '<span>' + highlightMatch(escapeHtml(s), escapeHtml(searchInput.value.trim())) + '</span></div>';
+                }).join('');
+                autocompleteDrop.classList.remove('hidden');
+                lucide.createIcons();
+            }).catch(function() { autocompleteDrop.classList.add('hidden'); });
+    }
+
+    // 자동완성 텍스트에서 입력 부분 하이라이트
+    function highlightMatch(text, query) {
+        var idx = text.toLowerCase().indexOf(query.toLowerCase());
+        if (idx < 0) return text;
+        return text.substring(0, idx) + '<b class="text-blue-600 dark:text-blue-400">' + text.substring(idx, idx + query.length) + '</b>' + text.substring(idx + query.length);
+    }
+
+    // 자동완성 항목 선택
+    function useAc(q) {
+        searchInput.value = q;
+        autocompleteDrop.classList.add('hidden');
+        doSearch();
+    }
+
+    // 키보드 내비게이션 (위/아래 화살표 + Enter)
     searchInput.addEventListener('keydown', function(e) {
+        var items = autocompleteDrop.querySelectorAll('.ac-item');
+        if (items.length > 0 && !autocompleteDrop.classList.contains('hidden')) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                acSelectedIdx = Math.min(acSelectedIdx + 1, items.length - 1);
+                updateAcHighlight(items);
+                return;
+            }
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                acSelectedIdx = Math.max(acSelectedIdx - 1, -1);
+                updateAcHighlight(items);
+                return;
+            }
+            if (e.key === 'Enter' && acSelectedIdx >= 0) {
+                e.preventDefault();
+                items[acSelectedIdx].click();
+                return;
+            }
+            if (e.key === 'Escape') {
+                autocompleteDrop.classList.add('hidden');
+                acSelectedIdx = -1;
+                return;
+            }
+        }
         if (e.key === 'Enter') { e.preventDefault(); doSearch(); }
     });
 
-    // 포커스 시 검색 기록 로드
-    searchInput.addEventListener('focus', function() { loadHistory(); });
+    // 자동완성 하이라이트 업데이트
+    function updateAcHighlight(items) {
+        for (var i = 0; i < items.length; i++) {
+            items[i].classList.toggle('bg-blue-50', i === acSelectedIdx);
+            items[i].classList.toggle('dark:bg-slate-700', i === acSelectedIdx);
+        }
+        if (acSelectedIdx >= 0) searchInput.value = items[acSelectedIdx].textContent.trim();
+    }
+
+    // 포커스 시 검색 기록 로드 (자동완성이 없을 때만)
+    searchInput.addEventListener('focus', function() {
+        if (searchInput.value.trim().length === 0) loadHistory();
+    });
 
     // 외부 클릭 시 드롭다운 닫기
     document.addEventListener('click', function(e) {
-        if (!document.getElementById('searchWrap').contains(e.target))
+        if (!document.getElementById('searchWrap').contains(e.target)) {
             historyDrop.classList.add('hidden');
+            autocompleteDrop.classList.add('hidden');
+        }
     });
 
     // 검색 실행
@@ -149,5 +324,214 @@
         d.textContent = t;
         return d.innerHTML;
     }
+
+    // ── 별점 평가 관련 ──
+    var selectedRating = 0;
+    var alreadyRated = false;
+    var ratingLabels = ['', '별로예요', '아쉬워요', '보통이에요', '좋아요', '최고예요!'];
+
+    // 로그인 사용자 평가 여부 확인
+    (function checkRated() {
+        fetch('/api/rating/check')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.rated) {
+                alreadyRated = true;
+                var btn = document.querySelector('button[onclick="openRatingModal()"]');
+                if (btn) {
+                    btn.querySelector('span').textContent = '평가 완료';
+                    btn.classList.add('opacity-60');
+                }
+            }
+        }).catch(function(){});
+    })();
+
+    // 별점 선택
+    function setRating(n) {
+        selectedRating = n;
+        var btns = document.querySelectorAll('#starGroup .star-btn');
+        for (var i = 0; i < btns.length; i++) {
+            btns[i].className = 'star-btn transition-colors ' +
+                (i < n ? 'text-yellow-400' : 'text-gray-300 dark:text-slate-600 hover:text-yellow-400');
+        }
+        document.getElementById('ratingLabel').textContent = ratingLabels[n];
+        document.getElementById('submitRatingBtn').disabled = false;
+    }
+
+    // 모달 열기 (이미 평가했으면 차단)
+    function openRatingModal() {
+        if (alreadyRated) {
+            alert('이미 평가를 완료하셨습니다. 계정당 1회만 가능합니다.');
+            return;
+        }
+        selectedRating = 0;
+        var btns = document.querySelectorAll('#starGroup .star-btn');
+        for (var i = 0; i < btns.length; i++)
+            btns[i].className = 'star-btn text-gray-300 dark:text-slate-600 hover:text-yellow-400 transition-colors';
+        document.getElementById('ratingLabel').textContent = '';
+        document.getElementById('ratingComment').value = '';
+        document.getElementById('submitRatingBtn').disabled = true;
+        document.getElementById('ratingModal').classList.remove('hidden');
+    }
+
+    // 모달 닫기
+    function closeRatingModal() {
+        document.getElementById('ratingModal').classList.add('hidden');
+    }
+
+    // 별점 제출
+    function submitRating() {
+        if (selectedRating === 0) return;
+        var comment = document.getElementById('ratingComment').value.trim();
+        fetch('/api/rating', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rating: selectedRating, comment: comment })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.result === 'ok') {
+                alreadyRated = true;
+                closeRatingModal();
+                // 버튼 상태 변경
+                var btn = document.querySelector('button[onclick="openRatingModal()"]');
+                if (btn) {
+                    btn.querySelector('span').textContent = '평가 완료';
+                    btn.classList.add('opacity-60');
+                }
+                // 감사 토스트
+                var toast = document.createElement('div');
+                toast.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-yellow-500 text-white px-6 py-3 rounded-xl shadow-lg font-bold z-[200]';
+                toast.textContent = '평가해주셔서 감사합니다!';
+                document.body.appendChild(toast);
+                setTimeout(function() { toast.remove(); }, 2500);
+                // 평가 목록 새로고침
+                loadReviews();
+            } else if (data.result === 'already_rated') {
+                alreadyRated = true;
+                closeRatingModal();
+                alert('이미 평가를 완료하셨습니다.');
+            } else {
+                alert(data.result === 'unauthorized' ? '로그인이 필요합니다.' : '오류가 발생했습니다.');
+            }
+        })
+        .catch(function() { alert('서버 오류가 발생했습니다.'); });
+    }
+
+    // 모달 바깥 클릭 시 닫기
+    document.getElementById('ratingModal').addEventListener('click', function(e) {
+        if (e.target === this) closeRatingModal();
+    });
+
+    // ── 공개 평가 로드 ──
+    function loadReviews() {
+        fetch('/api/ratings/public')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.reviews || data.reviews.length === 0) return;
+
+            document.getElementById('reviewSection').classList.remove('hidden');
+            document.getElementById('avgScore').textContent = data.avgRating;
+            document.getElementById('totalCount').textContent = data.totalCount;
+
+            // 별 생성 함수
+            function stars(n) {
+                var s = '';
+                for (var i = 0; i < 5; i++) {
+                    s += '<svg class="w-3.5 h-3.5 ' + (i < n ? 'text-yellow-400' : 'text-gray-200 dark:text-slate-600') + '" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
+                }
+                return s;
+            }
+
+            var container = document.getElementById('reviewCards');
+            var html = '';
+            data.reviews.forEach(function(r) {
+                html += '<div class="shrink-0 w-52 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow">'
+                    + '<div class="flex items-center gap-2 mb-2">'
+                    + '<div class="flex">' + stars(r.rating) + '</div>'
+                    + '</div>'
+                    + '<p class="text-sm text-gray-700 dark:text-slate-300 mb-3 line-clamp-3">' + escapeHtml(r.comment) + '</p>'
+                    + '<div class="flex justify-between items-center text-xs text-gray-400 dark:text-slate-500">'
+                    + '<span class="font-semibold">' + escapeHtml(r.nickname) + '</span>'
+                    + '<span>' + r.date + '</span>'
+                    + '</div>'
+                    + '</div>';
+            });
+
+            container.innerHTML = html;
+
+            // 5개 이상이면 가로 스크롤 모드로 전환
+            if (data.reviews.length >= 5) {
+                container.classList.remove('flex-wrap', 'justify-center');
+                container.classList.add('overflow-x-auto', 'snap-x', 'snap-mandatory');
+                var cards = container.querySelectorAll('div.shrink-0');
+                for (var i = 0; i < cards.length; i++) cards[i].classList.add('snap-start');
+            }
+        })
+        .catch(function() {});
+    }
+    loadReviews();
+
+    // ── 실시간 인기검색어 + 시간대별 차트 ──
+    (function loadTrends() {
+        fetch('/api/trends')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            // 순위 목록 렌더링
+            var listEl = document.getElementById('trendList');
+            if (!data.top10 || data.top10.length === 0) {
+                listEl.innerHTML = '<div class="text-sm text-gray-400 dark:text-slate-500 text-center py-6">검색 데이터가 없습니다</div>';
+                return;
+            }
+            var html = '<div class="space-y-1">';
+            data.top10.forEach(function(item) {
+                var rankColor = item.rank <= 3 ? 'text-rose-500 font-black' : 'text-gray-400 dark:text-slate-500 font-bold';
+                html += '<div class="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700/50 cursor-pointer transition-colors" onclick="searchInput.value=\'' + escapeHtml(item.query) + '\';doSearch()">'
+                    + '<span class="w-6 text-center text-sm ' + rankColor + '">' + item.rank + '</span>'
+                    + '<span class="flex-1 text-sm text-gray-700 dark:text-slate-300 truncate">' + escapeHtml(item.query) + '</span>'
+                    + '<span class="text-xs text-gray-400 dark:text-slate-500">' + item.count + '회</span>'
+                    + '</div>';
+            });
+            html += '</div>';
+            listEl.innerHTML = html;
+
+            // 시간대별 차트 렌더링
+            if (data.hourly && data.hourly.length > 0) {
+                var ctx = document.getElementById('trendChart').getContext('2d');
+                var isDark = document.documentElement.classList.contains('dark') || window.matchMedia('(prefers-color-scheme: dark)').matches;
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.hourly.map(function(h) { return h.hour; }),
+                        datasets: [{
+                            label: '검색량',
+                            data: data.hourly.map(function(h) { return h.count; }),
+                            borderColor: '#f43f5e',
+                            backgroundColor: 'rgba(244,63,94,0.1)',
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 3,
+                            pointBackgroundColor: '#f43f5e'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { ticks: { color: isDark ? '#94a3b8' : '#9ca3af', font: { size: 10 } }, grid: { display: false } },
+                            y: { beginAtZero: true, ticks: { color: isDark ? '#94a3b8' : '#9ca3af', font: { size: 10 }, stepSize: 1 }, grid: { color: isDark ? 'rgba(148,163,184,0.1)' : 'rgba(0,0,0,0.05)' } }
+                        }
+                    }
+                });
+            }
+
+            // 업데이트 시간 표시
+            document.getElementById('trendUpdated').textContent = '오늘 총 ' + data.todayTotal + '회 검색';
+        })
+        .catch(function() {
+            document.getElementById('trendList').innerHTML = '<div class="text-sm text-gray-400 text-center py-6">불러오기 실패</div>';
+        });
+    })();
 </script>
 }

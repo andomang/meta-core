@@ -163,8 +163,9 @@ public class EvalModel : PageModel
         {
             using var conn = _db.OpenConnection();
             // PostgreSQL은 LIMIT 사용 (MSSQL의 TOP 불가)
-            string sql = $"SELECT query, MAX(keyword) AS keyword FROM searchhistory GROUP BY query ORDER BY COUNT(*) DESC LIMIT {n}";
-            var rows = conn.Query(sql);
+            var rows = conn.Query(
+                "SELECT query, MAX(keyword) AS keyword FROM searchhistory GROUP BY query ORDER BY COUNT(*) DESC LIMIT @n",
+                new { n });
             foreach (var row in rows)
             {
                 // PostgreSQL 소문자 컬럼명으로 접근

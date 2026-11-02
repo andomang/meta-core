@@ -33,15 +33,36 @@ public class CommunityWriteModel : PageModel
         string? uid = HttpContext.Session.GetString("UserID");
         if (uid == null) return Redirect("/");
 
-        string title = Title?.Trim() ?? "";
-        string contents = Contents?.Trim() ?? "";
+        // XSS 방지: 제목은 태그 전부 제거, 본문도 HTML 태그 전부 제거
+        // (기존: script 태그만 제거 → <img onerror> 등 우회 가능했음)
+        string title = System.Text.RegularExpressions.Regex.Replace(Title?.Trim() ?? "", "<.*?>", "");
+        string contents = System.Text.RegularExpressions.Regex.Replace(Contents?.Trim() ?? "", "<.*?>", "");
         string fileName = "";
         int fileSize = 0;
 
         // 첨부파일 처리
         if (Upload != null && Upload.Length > 0)
         {
-            fileName = Path.GetFileName(Upload.FileName);
+            // 파일 크기 제한 (10MB)
+            if (Upload.Length > 10 * 1024 * 1024)
+            {
+                TempData["ToastMsg"] = "파일 크기는 10MB 이하만 허용됩니다.";
+                TempData["ToastType"] = "error";
+                return Page();
+            }
+
+            // 허용 확장자 검사
+            string ext = Path.GetExtension(Upload.FileName).ToLowerInvariant();
+            var allowed = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".zip", ".txt" };
+            if (!allowed.Contains(ext))
+            {
+                TempData["ToastMsg"] = "허용되지 않는 파일 형식입니다.";
+                TempData["ToastType"] = "error";
+                return Page();
+            }
+
+            // 파일명 안전 처리 (경로 탐색 방지)
+            fileName = Guid.NewGuid().ToString("N")[..8] + ext;
             fileSize = (int)Upload.Length;
 
             // 업로드 폴더 생성

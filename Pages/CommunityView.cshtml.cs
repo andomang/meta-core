@@ -160,6 +160,10 @@ public class CommunityViewModel : PageModel
         if (uid == null) return new JsonResult(new { result = "unauthorized" });
         if (string.IsNullOrWhiteSpace(content)) return new JsonResult(new { result = "empty" });
 
+        // XSS 방지: HTML 태그 제거 + 길이 제한
+        content = System.Text.RegularExpressions.Regex.Replace(content, "<.*?>", "");
+        if (content.Length > 1000) content = content[..1000];
+
         using var conn = _db.OpenConnection();
 
         // 댓글 INSERT 후 RETURNING으로 새 ID 반환 (PostgreSQL — 컬럼명은 commentid)
@@ -203,7 +207,7 @@ public class CommunityViewModel : PageModel
         return new JsonResult(new { result = "ok", totalCount });
     }
 
-    /// <summary>첨부파일 다운로드 (GET)</summary>
+    /// <summary>첨부파일 다운로드 (GET) — 경로 순회 공격 방지</summary>
     public IActionResult OnGetDownload(int no)
     {
         using var conn = _db.OpenConnection();
@@ -215,8 +219,23 @@ public class CommunityViewModel : PageModel
         string fileName = ((string)(row.filename ?? "")).Trim();
         if (string.IsNullOrEmpty(fileName)) return NotFound();
 
-        // 업로드 경로에서 파일 제공
-        string filePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "bbs", fileName);
+        // 경로 순회 공격 방지: 파일명에서 디렉토리 구분자·상위 참조 차단
+        if (fileName.Contains("..") || fileName.Contains('/') || fileName.Contains('\\'))
+            return BadRequest();
+
+        // 순수 파일명만 추출 (이중 안전장치)
+        fileName = Path.GetFileName(fileName);
+        if (string.IsNullOrEmpty(fileName)) return NotFound();
+
+        // 업로드 디렉토리 내부 경로 확인
+        string uploadDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "bbs");
+        string filePath = Path.Combine(uploadDir, fileName);
+
+        // 정규화된 경로가 업로드 디렉토리 내부인지 검증
+        string fullPath = Path.GetFullPath(filePath);
+        if (!fullPath.StartsWith(Path.GetFullPath(uploadDir), StringComparison.OrdinalIgnoreCase))
+            return BadRequest();
+
         if (!System.IO.File.Exists(filePath)) return NotFound();
 
         // MIME 타입 추론 후 Content-Disposition: attachment 로 다운로드 강제
@@ -239,14 +258,24 @@ public class CommunityViewModel : PageModel
         return File(fileStream, mime, fileName);
     }
 
-    /// <summary>게시글 삭제 (POST)</summary>
+    /// <summary>게시글 삭제 (POST) — 소유권 확인 후 관련 데이터 삭제</summary>
     public IActionResult OnPostDelete(int no)
     {
         string? uid = HttpContext.Session.GetString("UserID");
         if (uid == null) return RedirectToPage("Community");
 
         using var conn = _db.OpenConnection();
-        // 관련 데이터 순차 삭제 후 게시글 삭제
+
+        // 소유권 확인을 먼저 수행 (다른 사용자의 게시글 관련 데이터 삭제 방지)
+        var author = conn.QueryFirstOrDefault<string>(
+            "SELECT author FROM bbs WHERE no=@no", new { no });
+        if (author == null || author.Trim() != uid)
+        {
+            TempData["ToastMsg"] = "삭제 권한이 없습니다.";
+            TempData["ToastType"] = "error";
+            return RedirectToPage("Community");
+        }
+
         // 관련 데이터 순차 삭제 (FK 순서: notifications → bbscomment → bbslike → bbs)
         conn.Execute("DELETE FROM notifications WHERE bbsno=@no", new { no });
         conn.Execute("DELETE FROM bbscomment WHERE bbsno=@no", new { no });

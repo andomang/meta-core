@@ -12,11 +12,13 @@ public class GoogleCrawler
 {
     private readonly IHttpClientFactory _httpFactory;
     private readonly string _apiKey;
+    private readonly ApiUsageService _usage;
 
-    public GoogleCrawler(IHttpClientFactory httpFactory, IConfiguration config)
+    public GoogleCrawler(IHttpClientFactory httpFactory, IConfiguration config, ApiUsageService usage)
     {
         _httpFactory = httpFactory;
         _apiKey = config["ApiKeys:SerperApiKey"] ?? "";
+        _usage = usage;
     }
 
     /// <summary>Serper.dev로 구글 검색 결과 가져오기 (page=1~: Serper page 파라미터)</summary>
@@ -44,6 +46,8 @@ public class GoogleCrawler
             request.Headers.Add("X-API-KEY", _apiKey);
 
             var response = await client.SendAsync(request);
+            _usage.Increment("serper");
+            if (!response.IsSuccessStatusCode) return results;
             var json = await response.Content.ReadAsStringAsync();
 
             using var doc = JsonDocument.Parse(json);

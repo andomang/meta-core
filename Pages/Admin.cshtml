@@ -1,0 +1,344 @@
+@page
+@model AdminModel
+@{
+    ViewData["Title"] = "관리자";
+}
+
+<!-- 관리자 대시보드 -->
+<div class="max-w-4xl mx-auto px-4 py-8">
+    <h1 class="text-2xl font-bold mb-6 dark:text-white">관리자 대시보드</h1>
+
+    <!-- 탭 네비게이션 -->
+    <div class="flex gap-1 mb-6 border-b dark:border-slate-700">
+        <button onclick="switchTab('ratings')" id="tab-ratings" class="tab-btn px-5 py-3 text-sm font-bold rounded-t-xl transition-all border-b-2 border-yellow-500 text-yellow-600 dark:text-yellow-400">별점 평가</button>
+        <button onclick="switchTab('members')" id="tab-members" class="tab-btn px-5 py-3 text-sm font-bold rounded-t-xl transition-all border-b-2 border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-slate-300">회원 관리</button>
+        <button onclick="switchTab('connections')" id="tab-connections" class="tab-btn px-5 py-3 text-sm font-bold rounded-t-xl transition-all border-b-2 border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-slate-300">접속 현황</button>
+        <button onclick="switchTab('usage')" id="tab-usage" class="tab-btn px-5 py-3 text-sm font-bold rounded-t-xl transition-all border-b-2 border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-slate-300">API 사용량</button>
+        <button onclick="switchTab('stats')" id="tab-stats" class="tab-btn px-5 py-3 text-sm font-bold rounded-t-xl transition-all border-b-2 border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-slate-300">📊 통계</button>
+    </div>
+
+    <!-- ═══ 별점 평가 탭 ═══ -->
+    <div id="panel-ratings" class="tab-panel">
+        <div class="flex gap-4 mb-6">
+            <div class="bg-white dark:bg-slate-800 rounded-2xl shadow p-6 flex-1 text-center">
+                <p class="text-sm text-gray-500 dark:text-slate-400 mb-1">평균 별점</p>
+                <p id="avgRating" class="text-4xl font-black text-yellow-500">-</p>
+            </div>
+            <div class="bg-white dark:bg-slate-800 rounded-2xl shadow p-6 flex-1 text-center">
+                <p class="text-sm text-gray-500 dark:text-slate-400 mb-1">총 평가 수</p>
+                <p id="totalCount" class="text-4xl font-black text-blue-500">-</p>
+            </div>
+        </div>
+        <div id="ratingList" class="space-y-3">
+            <p class="text-sm text-gray-400 dark:text-slate-500">로딩 중...</p>
+        </div>
+    </div>
+
+    <!-- ═══ 회원 관리 탭 ═══ -->
+    <div id="panel-members" class="tab-panel hidden">
+        <p id="memberCount" class="text-sm text-gray-400 dark:text-slate-500 mb-4"></p>
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b dark:border-slate-700 bg-gray-50 dark:bg-slate-700/50">
+                            <th class="text-left px-4 py-3 dark:text-slate-300">아이디</th>
+                            <th class="text-left px-4 py-3 dark:text-slate-300">닉네임</th>
+                            <th class="text-left px-4 py-3 dark:text-slate-300">상태</th>
+                            <th class="text-left px-4 py-3 dark:text-slate-300">가입일</th>
+                            <th class="text-left px-4 py-3 dark:text-slate-300">최근 로그인</th>
+                        </tr>
+                    </thead>
+                    <tbody id="memberList">
+                        <tr><td colspan="5" class="px-4 py-6 text-center text-gray-400">로딩 중...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ 접속 현황 탭 ═══ -->
+    <div id="panel-connections" class="tab-panel hidden">
+        <div class="flex items-center gap-3 mb-4">
+            <p class="text-sm text-gray-500 dark:text-slate-400">최근 5분 이내 접속자</p>
+            <span id="connCount" class="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full text-xs font-bold">-</span>
+            <button onclick="loadConnections()" class="text-xs text-blue-500 hover:underline ml-auto">새로고침</button>
+        </div>
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b dark:border-slate-700 bg-gray-50 dark:bg-slate-700/50">
+                            <th class="text-left px-4 py-3 dark:text-slate-300">IP (마스킹)</th>
+                            <th class="text-left px-4 py-3 dark:text-slate-300">사용자</th>
+                            <th class="text-left px-4 py-3 dark:text-slate-300">아이디</th>
+                            <th class="text-left px-4 py-3 dark:text-slate-300">마지막 요청</th>
+                        </tr>
+                    </thead>
+                    <tbody id="connList">
+                        <tr><td colspan="4" class="px-4 py-6 text-center text-gray-400">로딩 중...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ API 사용량 탭 ═══ -->
+    <div id="panel-usage" class="tab-panel hidden">
+        <div id="usageSection" class="bg-white dark:bg-slate-800 rounded-2xl shadow p-6">
+            <p class="text-sm text-gray-400 dark:text-slate-500">로딩 중...</p>
+        </div>
+    </div>
+
+    <!-- ═══ 통계 차트 탭 ═══ -->
+    <div id="panel-stats" class="tab-panel hidden">
+        <!-- 총계 카드 -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            <div class="bg-white dark:bg-slate-800 rounded-2xl shadow p-5 text-center">
+                <div class="text-2xl font-black text-blue-600 dark:text-blue-400" id="st-members">-</div>
+                <div class="text-xs text-gray-500 dark:text-slate-400 mt-1">전체 회원</div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 rounded-2xl shadow p-5 text-center">
+                <div class="text-2xl font-black text-emerald-600 dark:text-emerald-400" id="st-searches">-</div>
+                <div class="text-xs text-gray-500 dark:text-slate-400 mt-1">전체 검색</div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 rounded-2xl shadow p-5 text-center">
+                <div class="text-2xl font-black text-violet-600 dark:text-violet-400" id="st-posts">-</div>
+                <div class="text-xs text-gray-500 dark:text-slate-400 mt-1">전체 게시글</div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 rounded-2xl shadow p-5 text-center">
+                <div class="text-2xl font-black text-orange-600 dark:text-orange-400" id="st-bookmarks">-</div>
+                <div class="text-xs text-gray-500 dark:text-slate-400 mt-1">전체 북마크</div>
+            </div>
+        </div>
+        <!-- 차트 그리드 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-white dark:bg-slate-800 rounded-2xl shadow p-6">
+                <h3 class="font-bold text-sm text-gray-700 dark:text-white mb-3">일별 가입자 (30일)</h3>
+                <div style="position:relative; height:220px;"><canvas id="chartSignups"></canvas></div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 rounded-2xl shadow p-6">
+                <h3 class="font-bold text-sm text-gray-700 dark:text-white mb-3">일별 검색량 (30일)</h3>
+                <div style="position:relative; height:220px;"><canvas id="chartSearches"></canvas></div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 rounded-2xl shadow p-6 lg:col-span-2">
+                <h3 class="font-bold text-sm text-gray-700 dark:text-white mb-3">일별 게시글 (30일)</h3>
+                <div style="position:relative; height:180px;"><canvas id="chartPosts"></canvas></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<!-- Chart.js CDN (통계 차트용) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+    lucide.createIcons();
+
+    // ── 탭 전환 ──
+    var tabColors = { ratings: 'yellow', members: 'green', connections: 'blue', usage: 'purple', stats: 'emerald' };
+    function switchTab(name) {
+        document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.add('hidden'); });
+        document.querySelectorAll('.tab-btn').forEach(function(b) {
+            b.className = 'tab-btn px-5 py-3 text-sm font-bold rounded-t-xl transition-all border-b-2 border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-slate-300';
+        });
+        document.getElementById('panel-' + name).classList.remove('hidden');
+        var color = tabColors[name] || 'blue';
+        var btn = document.getElementById('tab-' + name);
+        btn.className = 'tab-btn px-5 py-3 text-sm font-bold rounded-t-xl transition-all border-b-2 border-' + color + '-500 text-' + color + '-600 dark:text-' + color + '-400';
+    }
+
+    // ── 별점 데이터 로드 ──
+    fetch('/api/admin/ratings')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) return;
+            document.getElementById('avgRating').textContent = data.avgRating + ' / 5';
+            document.getElementById('totalCount').textContent = data.totalCount + '건';
+
+            function stars(n) {
+                var s = '';
+                for (var i = 0; i < 5; i++) s += (i < n ? '★' : '☆');
+                return s;
+            }
+            var listEl = document.getElementById('ratingList');
+            if (!data.ratings || data.ratings.length === 0) {
+                listEl.innerHTML = '<p class="text-sm text-gray-400 dark:text-slate-500">아직 평가가 없습니다.</p>';
+                return;
+            }
+            listEl.innerHTML = data.ratings.map(function(r) {
+                return '<div class="bg-white dark:bg-slate-800 rounded-xl shadow p-4 flex items-start gap-4">'
+                    + '<div class="text-yellow-400 text-lg font-bold whitespace-nowrap">' + stars(r.rating) + '</div>'
+                    + '<div class="flex-1 min-w-0">'
+                    + '<p class="text-sm font-bold dark:text-white">' + escapeHtml(r.nickname) + ' <span class="text-gray-400 font-normal text-xs">(' + escapeHtml(r.userid) + ')</span></p>'
+                    + (r.comment ? '<p class="text-sm text-gray-600 dark:text-slate-300 mt-1">' + escapeHtml(r.comment) + '</p>' : '')
+                    + '<p class="text-xs text-gray-400 dark:text-slate-500 mt-1">' + r.created_at + '</p>'
+                    + '</div></div>';
+            }).join('');
+        });
+
+    // ── 회원 목록 로드 ──
+    fetch('/api/admin/members')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) return;
+            document.getElementById('memberCount').textContent = '총 ' + data.totalMembers + '명';
+            var tbody = document.getElementById('memberList');
+            if (!data.members || data.members.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-6 text-center text-gray-400">회원이 없습니다.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.members.map(function(m) {
+                var statusBadge = m.status === 'true'
+                    ? '<span class="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full text-xs font-bold">활성</span>'
+                    : '<span class="px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full text-xs font-bold">비활성</span>';
+                return '<tr class="border-b dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700/30">'
+                    + '<td class="px-4 py-3 dark:text-slate-300 font-mono text-xs">' + escapeHtml(m.userid) + '</td>'
+                    + '<td class="px-4 py-3 dark:text-slate-300 font-bold">' + escapeHtml(m.nickname) + '</td>'
+                    + '<td class="px-4 py-3">' + statusBadge + '</td>'
+                    + '<td class="px-4 py-3 text-gray-400 dark:text-slate-500 text-xs">' + m.created_at + '</td>'
+                    + '<td class="px-4 py-3 text-gray-400 dark:text-slate-500 text-xs">' + m.last_login + '</td>'
+                    + '</tr>';
+            }).join('');
+        });
+
+    // ── 접속 현황 로드 ──
+    function loadConnections() {
+        fetch('/api/admin/connections')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.error) return;
+                document.getElementById('connCount').textContent = data.count + '명';
+                var tbody = document.getElementById('connList');
+                if (!data.connections || data.connections.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-6 text-center text-gray-400">접속자 없음</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = data.connections.map(function(c) {
+                    var isMember = c.userid !== '-';
+                    var nickClass = isMember ? 'font-bold dark:text-white' : 'text-gray-400 dark:text-slate-500';
+                    return '<tr class="border-b dark:border-slate-700">'
+                        + '<td class="px-4 py-3 font-mono text-xs dark:text-slate-400">' + escapeHtml(c.ip) + '</td>'
+                        + '<td class="px-4 py-3 ' + nickClass + '">' + escapeHtml(c.nickname) + '</td>'
+                        + '<td class="px-4 py-3 font-mono text-xs dark:text-slate-400">' + escapeHtml(c.userid) + '</td>'
+                        + '<td class="px-4 py-3 text-xs dark:text-slate-400">' + c.lastSeen + '</td>'
+                        + '</tr>';
+                }).join('');
+            });
+    }
+    loadConnections();
+
+    // ── API 사용량 로드 ──
+    fetch('/api/admin/usage')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) return;
+            var el = document.getElementById('usageSection');
+            var limitsHtml = '<div class="mb-4"><p class="text-sm font-bold text-gray-700 dark:text-slate-300 mb-2">무료 한도</p>'
+                + '<div class="grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-slate-400">'
+                + '<span>Serper (Google): ' + data.limits.serper + '</span>'
+                + '<span>Brave: ' + data.limits.brave + '</span>'
+                + '<span>Naver: ' + data.limits.naver + '</span>'
+                + '<span>Kakao (Daum): ' + data.limits.kakao + '</span>'
+                + '</div></div>';
+            var tableHtml = '<table class="w-full text-sm"><thead>'
+                + '<tr class="border-b dark:border-slate-700"><th class="text-left py-2 dark:text-slate-300">엔진</th>'
+                + '<th class="text-right py-2 dark:text-slate-300">오늘</th>'
+                + '<th class="text-right py-2 dark:text-slate-300">이번달</th>'
+                + '<th class="text-right py-2 dark:text-slate-300">누적</th></tr></thead><tbody>';
+            if (data.usage && data.usage.length > 0) {
+                data.usage.forEach(function(u) {
+                    tableHtml += '<tr class="border-b dark:border-slate-700">'
+                        + '<td class="py-2 dark:text-slate-300 font-bold">' + u.engine + '</td>'
+                        + '<td class="py-2 text-right dark:text-slate-400">' + u.today.toLocaleString() + '</td>'
+                        + '<td class="py-2 text-right dark:text-slate-400">' + u.monthly.toLocaleString() + '</td>'
+                        + '<td class="py-2 text-right dark:text-slate-400">' + u.total.toLocaleString() + '</td></tr>';
+                });
+            } else {
+                tableHtml += '<tr><td colspan="4" class="py-4 text-center text-gray-400">데이터 없음</td></tr>';
+            }
+            tableHtml += '</tbody></table>';
+            el.innerHTML = limitsHtml + tableHtml;
+        });
+
+    // HTML 이스케이프
+    function escapeHtml(t) {
+        var d = document.createElement('div');
+        d.textContent = t || '';
+        return d.innerHTML;
+    }
+
+    // ── 관리자 통계 차트 로드 ──
+    var statsLoaded = false;
+    // 탭 전환 시 stats 탭이면 차트 로드 (한 번만)
+    var origSwitchTab = switchTab;
+    switchTab = function(name) {
+        origSwitchTab(name);
+        if (name === 'stats' && !statsLoaded) { loadAdminStats(); statsLoaded = true; }
+    };
+
+    function loadAdminStats() {
+        fetch('/api/admin/stats')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.error) return;
+
+                // 총계 표시
+                document.getElementById('st-members').textContent = (data.totals.members || 0).toLocaleString();
+                document.getElementById('st-searches').textContent = (data.totals.searches || 0).toLocaleString();
+                document.getElementById('st-posts').textContent = (data.totals.posts || 0).toLocaleString();
+                document.getElementById('st-bookmarks').textContent = (data.totals.bookmarks || 0).toLocaleString();
+
+                var isDark = document.documentElement.classList.contains('dark') || window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var gridColor = isDark ? 'rgba(148,163,184,0.1)' : 'rgba(0,0,0,0.05)';
+                var tickColor = isDark ? '#94a3b8' : '#9ca3af';
+
+                // 가입자 차트
+                if (data.dailySignups && data.dailySignups.length > 0) {
+                    new Chart(document.getElementById('chartSignups').getContext('2d'), {
+                        type: 'bar',
+                        data: {
+                            labels: data.dailySignups.map(function(d) { return d.day; }),
+                            datasets: [{ label: '가입자', data: data.dailySignups.map(function(d) { return d.count; }),
+                                backgroundColor: 'rgba(59,130,246,0.6)', borderColor: '#3b82f6', borderWidth: 1, borderRadius: 4 }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+                            scales: { x: { ticks: { color: tickColor, font: { size: 9 }, maxRotation: 45 }, grid: { display: false } },
+                                y: { beginAtZero: true, ticks: { color: tickColor, stepSize: 1 }, grid: { color: gridColor } } } }
+                    });
+                }
+
+                // 검색량 차트
+                if (data.dailySearches && data.dailySearches.length > 0) {
+                    new Chart(document.getElementById('chartSearches').getContext('2d'), {
+                        type: 'line',
+                        data: {
+                            labels: data.dailySearches.map(function(d) { return d.day; }),
+                            datasets: [{ label: '검색량', data: data.dailySearches.map(function(d) { return d.count; }),
+                                borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', fill: true, tension: 0.4, pointRadius: 3, pointBackgroundColor: '#10b981' }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+                            scales: { x: { ticks: { color: tickColor, font: { size: 9 }, maxRotation: 45 }, grid: { display: false } },
+                                y: { beginAtZero: true, ticks: { color: tickColor, stepSize: 1 }, grid: { color: gridColor } } } }
+                    });
+                }
+
+                // 게시글 차트
+                if (data.dailyPosts && data.dailyPosts.length > 0) {
+                    new Chart(document.getElementById('chartPosts').getContext('2d'), {
+                        type: 'bar',
+                        data: {
+                            labels: data.dailyPosts.map(function(d) { return d.day; }),
+                            datasets: [{ label: '게시글', data: data.dailyPosts.map(function(d) { return d.count; }),
+                                backgroundColor: 'rgba(139,92,246,0.6)', borderColor: '#8b5cf6', borderWidth: 1, borderRadius: 4 }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+                            scales: { x: { ticks: { color: tickColor, font: { size: 9 }, maxRotation: 45 }, grid: { display: false } },
+                                y: { beginAtZero: true, ticks: { color: tickColor, stepSize: 1 }, grid: { color: gridColor } } } }
+                    });
+                }
+            })
+            .catch(function() {});
+    }
+</script>
+}

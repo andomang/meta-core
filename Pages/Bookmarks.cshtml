@@ -1,0 +1,131 @@
+@page
+@model MetaSearch.Pages.BookmarksModel
+@{
+    ViewData["Title"] = "북마크 - Meta Search";
+}
+
+<!-- 북마크 관리 페이지 -->
+<div class="max-w-4xl mx-auto px-6 py-12 min-h-screen">
+    <div class="flex items-center justify-between mb-8">
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+            <i data-lucide="bookmark" class="w-7 h-7 text-orange-500"></i>
+            내 북마크
+        </h1>
+        <!-- 폴더 필터 -->
+        <select id="folderFilter" onchange="filterByFolder(this.value)"
+                class="px-4 py-2 border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 dark:text-white text-sm outline-none focus:ring-2 focus:ring-orange-400">
+            <option value="">전체 폴더</option>
+        </select>
+    </div>
+
+    <!-- 북마크 목록 -->
+    <div id="bookmarkList" class="space-y-3">
+        <div class="text-center text-gray-400 dark:text-slate-500 py-12">로딩 중...</div>
+    </div>
+
+    <!-- 비어있을 때 -->
+    <div id="emptyState" class="hidden text-center py-16">
+        <i data-lucide="bookmark-x" class="w-16 h-16 text-gray-200 dark:text-slate-700 mx-auto mb-4"></i>
+        <p class="text-gray-400 dark:text-slate-500 font-medium">저장된 북마크가 없습니다</p>
+        <p class="text-sm text-gray-300 dark:text-slate-600 mt-1">검색 결과에서 북마크 버튼을 눌러 저장해보세요</p>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    lucide.createIcons();
+    var allBookmarks = [];
+
+    // 북마크 목록 로드
+    function loadBookmarks() {
+        fetch('/api/bookmarks')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                allBookmarks = data.items || [];
+
+                // 폴더 필터 옵션 업데이트
+                var sel = document.getElementById('folderFilter');
+                var folders = data.folders || [];
+                sel.innerHTML = '<option value="">전체 폴더</option>';
+                folders.forEach(function(f) {
+                    sel.innerHTML += '<option value="' + escapeHtml(f) + '">' + escapeHtml(f) + '</option>';
+                });
+
+                renderBookmarks(allBookmarks);
+            })
+            .catch(function() {
+                document.getElementById('bookmarkList').innerHTML =
+                    '<div class="text-center text-red-400 py-8">불러오기 실패</div>';
+            });
+    }
+
+    // 폴더별 필터
+    function filterByFolder(folder) {
+        if (!folder) { renderBookmarks(allBookmarks); return; }
+        var filtered = allBookmarks.filter(function(b) { return b.folder === folder; });
+        renderBookmarks(filtered);
+    }
+
+    // 북마크 렌더링
+    function renderBookmarks(items) {
+        var container = document.getElementById('bookmarkList');
+        var empty = document.getElementById('emptyState');
+        if (!items || items.length === 0) {
+            container.innerHTML = '';
+            empty.classList.remove('hidden');
+            return;
+        }
+        empty.classList.add('hidden');
+
+        var srcColors = {
+            google: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
+            naver: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+            daum: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+            brave: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+        };
+        var srcNames = { google: 'Google', naver: '네이버', daum: '다음', brave: 'Brave' };
+
+        container.innerHTML = items.map(function(b) {
+            var srcCss = srcColors[b.source] || 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300';
+            var srcName = srcNames[b.source] || b.source || '기타';
+            return '<div class="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-5 hover:shadow-md transition-shadow">'
+                + '<div class="flex items-start justify-between gap-4">'
+                + '<div class="flex-1 min-w-0">'
+                + '<div class="flex items-center gap-2 mb-1">'
+                + '<span class="text-xs px-2 py-0.5 rounded-full font-medium ' + srcCss + '">' + escapeHtml(srcName) + '</span>'
+                + '<span class="text-xs text-gray-400 dark:text-slate-500">' + escapeHtml(b.folder) + '</span>'
+                + '</div>'
+                + '<a href="' + escapeHtml(b.url) + '" target="_blank" class="text-base font-bold text-blue-600 dark:text-blue-400 hover:underline line-clamp-1">' + escapeHtml(b.title) + '</a>'
+                + '<p class="text-sm text-gray-500 dark:text-slate-400 mt-1 line-clamp-2">' + escapeHtml(b.description) + '</p>'
+                + '<span class="text-xs text-gray-300 dark:text-slate-600 mt-2 inline-block">' + escapeHtml(b.created_at) + '</span>'
+                + '</div>'
+                + '<button type="button" onclick="deleteBookmark(' + b.id + ', this)" class="text-gray-300 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 transition-colors shrink-0 mt-1">'
+                + '<i data-lucide="trash-2" class="w-4 h-4"></i></button>'
+                + '</div></div>';
+        }).join('');
+        lucide.createIcons();
+    }
+
+    // 북마크 삭제
+    function deleteBookmark(id, btn) {
+        if (!confirm('이 북마크를 삭제하시겠습니까?')) return;
+        fetch('/api/bookmarks/' + id, { method: 'DELETE' })
+            .then(function(r) { return r.json(); })
+            .then(function() {
+                var card = btn.closest('.bg-white, .dark\\:bg-slate-800') || btn.parentNode.parentNode;
+                if (card) card.remove();
+                allBookmarks = allBookmarks.filter(function(b) { return b.id !== id; });
+                if (allBookmarks.length === 0) document.getElementById('emptyState').classList.remove('hidden');
+            });
+    }
+
+    function escapeHtml(t) {
+        if (!t) return '';
+        var d = document.createElement('div');
+        d.textContent = t;
+        return d.innerHTML;
+    }
+
+    loadBookmarks();
+</script>
+}

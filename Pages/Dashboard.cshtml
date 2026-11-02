@@ -1,0 +1,152 @@
+@page
+@model MetaSearch.Pages.DashboardModel
+@{
+    ViewData["Title"] = "대시보드 - Meta Search";
+}
+
+<!-- 사용자 대시보드 -->
+<div class="max-w-5xl mx-auto px-6 py-12 min-h-screen">
+
+    <div class="flex items-center gap-3 mb-8">
+        <i data-lucide="layout-dashboard" class="w-7 h-7 text-emerald-500"></i>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">내 대시보드</h1>
+    </div>
+
+    <!-- 로그인 안 한 경우 -->
+    <div id="loginRequired" class="hidden text-center py-16">
+        <i data-lucide="lock" class="w-16 h-16 text-gray-200 dark:text-slate-700 mx-auto mb-4"></i>
+        <p class="text-gray-400 dark:text-slate-500 font-medium">로그인이 필요합니다</p>
+        <button type="button" onclick="if(typeof openLogin==='function') openLogin();"
+                class="mt-4 px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all cursor-pointer">
+            로그인하기
+        </button>
+    </div>
+
+    <!-- 대시보드 콘텐츠 -->
+    <div id="dashContent" class="hidden">
+        <!-- 요약 통계 카드 -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+            <div class="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-6 text-center">
+                <div class="text-3xl font-black text-blue-600 dark:text-blue-400" id="statSearches">0</div>
+                <div class="text-sm text-gray-500 dark:text-slate-400 mt-1">총 검색 수</div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-6 text-center">
+                <div class="text-3xl font-black text-emerald-600 dark:text-emerald-400" id="statPosts">0</div>
+                <div class="text-sm text-gray-500 dark:text-slate-400 mt-1">내 게시글</div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-6 text-center">
+                <div class="text-3xl font-black text-orange-600 dark:text-orange-400" id="statBookmarks">0</div>
+                <div class="text-sm text-gray-500 dark:text-slate-400 mt-1">북마크</div>
+            </div>
+        </div>
+
+        <!-- 차트 영역 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- 일별 검색량 차트 -->
+            <div class="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-6">
+                <h3 class="font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+                    <i data-lucide="bar-chart-3" class="w-5 h-5 text-blue-500"></i>
+                    최근 30일 검색량
+                </h3>
+                <div style="position:relative; height:220px;">
+                    <canvas id="searchChart"></canvas>
+                </div>
+            </div>
+            <!-- 키워드 클라우드 -->
+            <div class="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-6">
+                <h3 class="font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+                    <i data-lucide="hash" class="w-5 h-5 text-emerald-500"></i>
+                    자주 검색한 키워드
+                </h3>
+                <div id="keywordCloud" class="flex flex-wrap gap-2 justify-center py-4 min-h-[200px] items-center"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<!-- Chart.js CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+    lucide.createIcons();
+
+    // 대시보드 데이터 로드
+    fetch('/api/dashboard')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error === 'login_required') {
+                document.getElementById('loginRequired').classList.remove('hidden');
+                return;
+            }
+            document.getElementById('dashContent').classList.remove('hidden');
+
+            // 요약 통계
+            document.getElementById('statSearches').textContent = (data.totals.searches || 0).toLocaleString();
+            document.getElementById('statPosts').textContent = (data.totals.posts || 0).toLocaleString();
+            document.getElementById('statBookmarks').textContent = (data.totals.bookmarks || 0).toLocaleString();
+
+            // 일별 검색량 차트
+            if (data.dailySearches && data.dailySearches.length > 0) {
+                var isDark = document.documentElement.classList.contains('dark') || window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var ctx = document.getElementById('searchChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.dailySearches.map(function(d) { return d.day; }),
+                        datasets: [{
+                            label: '검색 수',
+                            data: data.dailySearches.map(function(d) { return d.count; }),
+                            backgroundColor: 'rgba(59,130,246,0.6)',
+                            borderColor: '#3b82f6',
+                            borderWidth: 1,
+                            borderRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { ticks: { color: isDark ? '#94a3b8' : '#9ca3af', font: { size: 9 }, maxRotation: 45 }, grid: { display: false } },
+                            y: { beginAtZero: true, ticks: { color: isDark ? '#94a3b8' : '#9ca3af', stepSize: 1 }, grid: { color: isDark ? 'rgba(148,163,184,0.1)' : 'rgba(0,0,0,0.05)' } }
+                        }
+                    }
+                });
+            } else {
+                document.getElementById('searchChart').parentElement.querySelector('canvas').outerHTML =
+                    '<div class="text-center text-gray-400 dark:text-slate-500 py-12 text-sm">검색 데이터가 없습니다</div>';
+            }
+
+            // 키워드 클라우드
+            var cloud = document.getElementById('keywordCloud');
+            if (data.topKeywords && data.topKeywords.length > 0) {
+                var maxCnt = data.topKeywords[0].count;
+                var colors = ['bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+                              'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+                              'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+                              'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
+                              'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300'];
+                cloud.innerHTML = data.topKeywords.map(function(k, i) {
+                    var size = Math.max(0.8, (k.count / maxCnt) * 1.5 + 0.5);
+                    var c = colors[i % colors.length];
+                    return '<a href="/SearchResults?q=' + encodeURIComponent(k.query) + '"'
+                        + ' class="px-3 py-1.5 rounded-full font-bold transition-all hover:scale-105 ' + c + '"'
+                        + ' style="font-size:' + size + 'rem">'
+                        + escapeHtml(k.query) + ' <span class="text-xs opacity-60">' + k.count + '</span></a>';
+                }).join('');
+            } else {
+                cloud.innerHTML = '<span class="text-gray-400 dark:text-slate-500 text-sm">키워드 데이터가 없습니다</span>';
+            }
+        })
+        .catch(function() {
+            document.getElementById('loginRequired').classList.remove('hidden');
+        });
+
+    function escapeHtml(t) {
+        if (!t) return '';
+        var d = document.createElement('div');
+        d.textContent = t;
+        return d.innerHTML;
+    }
+</script>
+}

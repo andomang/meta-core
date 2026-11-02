@@ -1,7 +1,11 @@
 @page
 @model SearchResultsModel
 @{
-    ViewData["Title"] = Model.Query + " - 검색";
+    ViewData["Title"] = Model.Query + " - Meta Search 통합검색 결과";
+}
+
+@section HeadContent {
+    <meta name="description" content="'@Model.Query' 검색 결과 - 구글, 네이버, 다음, 빙, 유튜브, 나무위키에서 동시에 검색한 통합 결과입니다. Meta Search에서 여러 검색엔진 결과를 한눈에 비교하세요." />
 }
 
 <!-- 상단 고정 검색바 -->
@@ -44,8 +48,41 @@
                 <span id="keywordBadge" class="hidden px-2.5 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-semibold rounded-full border border-blue-200 dark:border-blue-700/50">@Model.Keyword</span>
             </div>
 
+            <!-- AI 검색 요약 — 페이지 로드 시 자동 실행 -->
+            <div id="aiSummaryArea" class="mb-6">
+                <div id="aiSummaryBox">
+                    <div class="bg-gradient-to-r from-violet-50 to-blue-50 dark:from-violet-950/30 dark:to-blue-950/30 border border-violet-200 dark:border-violet-800/50 rounded-2xl p-5">
+                        <div class="flex items-center gap-2 mb-3">
+                            <i data-lucide="sparkles" class="w-5 h-5 text-violet-500"></i>
+                            <span class="font-bold text-sm text-violet-700 dark:text-violet-300">AI 검색 요약</span>
+                            <span class="text-xs text-violet-400 dark:text-violet-500 ml-auto">Powered by AI</span>
+                        </div>
+                        <div id="aiSummaryContent" class="text-sm text-gray-700 dark:text-slate-300 leading-relaxed">
+                            <div class="flex items-center gap-2"><div class="w-4 h-4 border-2 border-violet-400 border-t-transparent rounded-full animate-spin"></div><span class="text-violet-400 text-xs">AI가 요약을 생성하고 있습니다...</span></div>
+                        </div>
+                    </div>
+                </div>
+                <!-- 실패 시 재시도 버튼 (초기 숨김) -->
+                <button type="button" id="aiRetryBtn" onclick="loadAiSummary()" class="hidden flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-violet-500 to-blue-500 text-white rounded-xl text-sm font-bold hover:from-violet-600 hover:to-blue-600 transition-all cursor-pointer shadow-sm mt-2">
+                    <i data-lucide="sparkles" class="w-4 h-4"></i>
+                    AI 요약 재시도
+                </button>
+            </div>
+
             <!-- Extra 패널 (상단) -->
             <div id="extraPanel" class="hidden mb-6"></div>
+
+            <!-- 부가정보 개별 로드 버튼들 -->
+            <div id="extraButtons" class="hidden flex flex-wrap gap-2 mb-6">
+                <button type="button" onclick="loadExtraType('places', this)"   class="extra-btn flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-bold text-gray-600 dark:text-slate-300 hover:border-blue-400 hover:text-blue-600 dark:hover:border-blue-500 dark:hover:text-blue-400 transition-all cursor-pointer"><i data-lucide="map-pin" class="w-3.5 h-3.5 text-rose-500"></i>카카오맵</button>
+                <button type="button" onclick="loadExtraType('shopping', this)" class="extra-btn flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-bold text-gray-600 dark:text-slate-300 hover:border-green-400 hover:text-green-600 dark:hover:border-green-500 dark:hover:text-green-400 transition-all cursor-pointer"><i data-lucide="shopping-bag" class="w-3.5 h-3.5 text-green-500"></i>쇼핑</button>
+                <button type="button" onclick="loadExtraType('news', this)"     class="extra-btn flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-bold text-gray-600 dark:text-slate-300 hover:border-blue-400 hover:text-blue-600 dark:hover:border-blue-500 dark:hover:text-blue-400 transition-all cursor-pointer"><i data-lucide="newspaper" class="w-3.5 h-3.5 text-blue-500"></i>뉴스</button>
+                <button type="button" onclick="loadExtraType('blog', this)"     class="extra-btn flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-bold text-gray-600 dark:text-slate-300 hover:border-violet-400 hover:text-violet-600 dark:hover:border-violet-500 dark:hover:text-violet-400 transition-all cursor-pointer"><i data-lucide="pen-line" class="w-3.5 h-3.5 text-violet-500"></i>블로그</button>
+                <button type="button" onclick="loadExtraType('youtube', this)"  class="extra-btn flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-bold text-gray-600 dark:text-slate-300 hover:border-red-400 hover:text-red-600 dark:hover:border-red-500 dark:hover:text-red-400 transition-all cursor-pointer"><i data-lucide="play-circle" class="w-3.5 h-3.5 text-red-500"></i>유튜브</button>
+                <button type="button" onclick="loadExtraType('wiki', this)"     class="extra-btn flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-bold text-gray-600 dark:text-slate-300 hover:border-gray-400 hover:text-gray-700 dark:hover:border-slate-500 dark:hover:text-slate-200 transition-all cursor-pointer"><i data-lucide="globe" class="w-3.5 h-3.5 text-gray-500"></i>위키피디아</button>
+                <button type="button" onclick="loadExtraType('weather', this)"  class="extra-btn flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-bold text-gray-600 dark:text-slate-300 hover:border-cyan-400 hover:text-cyan-600 dark:hover:border-cyan-500 dark:hover:text-cyan-400 transition-all cursor-pointer"><i data-lucide="cloud-sun" class="w-3.5 h-3.5 text-cyan-500"></i>날씨</button>
+                <button type="button" onclick="loadExtraType('exchange', this)" class="extra-btn flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-bold text-gray-600 dark:text-slate-300 hover:border-amber-400 hover:text-amber-600 dark:hover:border-amber-500 dark:hover:text-amber-400 transition-all cursor-pointer"><i data-lucide="banknote" class="w-3.5 h-3.5 text-amber-500"></i>환율</button>
+            </div>
 
             <!-- 전체화면 로딩 오버레이 -->
             <div id="pageLoadingOverlay" class="hidden fixed inset-0 z-[9999] bg-white dark:bg-slate-950 flex flex-col items-center justify-center gap-6">
@@ -117,6 +154,12 @@
                 </h3>
                 <div id="relatedList" class="space-y-2"></div>
             </div>
+            <!-- 관련 검색어 수동 로드 -->
+            <button type="button" id="relatedLoadBtn" class="hidden w-full items-center justify-center gap-2 px-4 py-3 bg-gray-50 dark:bg-slate-800 border border-dashed border-gray-300 dark:border-slate-600 rounded-2xl text-sm text-gray-500 dark:text-slate-400 font-bold hover:border-blue-400 hover:text-blue-500 dark:hover:border-blue-500 dark:hover:text-blue-400 transition-all cursor-pointer"
+                    onclick="reloadRelated()">
+                <i data-lucide="sparkles" class="w-4 h-4"></i>
+                관련 검색어 불러오기
+            </button>
         </div>
     </div>
 </div>
@@ -126,8 +169,8 @@
     lucide.createIcons();
 
     // ── 서버 데이터 수신 ──
-    var _query    = '@Html.Raw(Model.Query.Replace("'", "\\'"))';
-    var _keyword  = '@Html.Raw(Model.Keyword)';
+    var _query    = '@Html.Raw(System.Web.HttpUtility.JavaScriptStringEncode(Model.Query))';
+    var _keyword  = '@Html.Raw(System.Web.HttpUtility.JavaScriptStringEncode(Model.Keyword))';
     var _results  = @Html.Raw(Model.ResultsJson);   // 전체 RRF 결과
     var _google   = @Html.Raw(Model.GoogleJson);
     var _naver    = @Html.Raw(Model.NaverJson);
@@ -136,7 +179,7 @@
     var _scores   = @Html.Raw(Model.ScoresJson);
     // Brave 탭 노출 여부 (API 키 설정 시에만 결과 있음)
     if (_brave && _brave.length > 0) document.getElementById('braveTab').style.display = '';
-    var _extra    = '@Html.Raw(Model.ExtraJson.Replace("'", "\\'"))';
+    var _extra    = '@Html.Raw(System.Web.HttpUtility.JavaScriptStringEncode(Model.ExtraJson))';
     var _related  = @Html.Raw(Model.RelatedJson);
     var _ranked   = @Html.Raw(Model.RankedJson);    // AI 재정렬 상위 10개
 
@@ -152,10 +195,40 @@
     document.getElementById('keywordBadge').classList.remove('hidden');
     renderExtraPanel();
     renderRelated();
+    loadAiSummary(); // AI 요약 자동 실행
 
     // 초기 탭 결과 세팅
     activeItems = getAllItems();
     renderResultsPage();
+    enrichImages();
+
+    // ── OG 이미지 enrichment — 이미지 없는 결과에 og:image 비동기 보완 ──
+    function enrichImages() {
+        // 이미지가 없는 결과 항목만 수집 (최대 6개, 서버 부하 제한)
+        var cards = document.querySelectorAll('#resultsContainer [data-url]');
+        var queue = [];
+        cards.forEach(function(el) {
+            if (!el.querySelector('img') && queue.length < 6)
+                queue.push(el);
+        });
+        queue.forEach(function(el) {
+            var url = el.getAttribute('data-url');
+            if (!url) return;
+            fetch('/SearchResults?handler=Enrich&url=' + encodeURIComponent(url))
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (!d.img) return;
+                    // 결과 카드 첫번째 div(텍스트 영역) 옆에 이미지 삽입
+                    var img = document.createElement('img');
+                    img.src = d.img;
+                    img.alt = '';
+                    img.className = 'w-28 h-20 object-cover rounded-lg flex-shrink-0 ml-4 bg-gray-100 dark:bg-slate-700';
+                    img.onerror = function() { this.remove(); };
+                    el.appendChild(img);
+                })
+                .catch(function() {});
+        });
+    }
 
     // ── 검색 실행 ──
     function doSearch() {
@@ -342,7 +415,7 @@
             var imgUrl  = item.imageUrl || item.img || '';
             if (imgUrl) {
                 imgHtml = '<img src="' + escapeHtml(imgUrl) + '" alt=""'
-                    + ' class="w-28 h-20 object-cover rounded-lg flex-shrink-0 ml-4 bg-gray-100 dark:bg-slate-700"'
+                    + ' class="w-20 h-14 object-cover rounded-lg flex-shrink-0 ml-4 bg-gray-100 dark:bg-slate-700"'
                     + ' onerror="this.style.display=\'none\'">';
             }
 
@@ -360,6 +433,9 @@
                 + '</a>'
                 + '<p class="mt-1 text-sm text-gray-700 dark:text-slate-300 line-clamp-2">'
                 + escapeHtml(item.description || item.desc || '') + '</p>'
+                + '<button type="button" onclick="addBookmark(this)" data-title="' + escapeAttr(item.title || '') + '" data-url="' + escapeAttr(item.url || '') + '" data-desc="' + escapeAttr(item.description || item.desc || '') + '" data-source="' + escapeAttr(src) + '"'
+                + ' class="mt-2 inline-flex items-center gap-1 text-xs text-gray-400 dark:text-slate-500 hover:text-orange-500 dark:hover:text-orange-400 transition-colors">'
+                + '<i data-lucide="bookmark" class="w-3.5 h-3.5"></i> 북마크</button>'
                 + '</div>'
                 + imgHtml
                 + '</div>';
@@ -488,12 +564,18 @@
             });
     }
 
-    // ── Extra 패널 렌더링 (원본과 동일) ──
+    // ── Extra 패널 렌더링 ──
     function renderExtraPanel() {
         var panel = document.getElementById('extraPanel');
+        var btns = document.getElementById('extraButtons');
         try {
             var data = JSON.parse(_extra);
-            if (!data || !data.type) { panel.classList.add('hidden'); return; }
+            if (!data || !data.type) {
+                panel.classList.add('hidden');
+                // 데이터 없으면 개별 버튼 표시
+                if (_query) btns.classList.remove('hidden');
+                return;
+            }
             var inner = '';
             if      (data.type === 'places')   inner = renderPlaces(data);
             else if (data.type === 'shopping') inner = renderShopping(data);
@@ -504,10 +586,31 @@
             else if (data.type === 'weather')  inner = renderWeather(data);
             else if (data.type === 'blog')     inner = renderBlog(data);
             if (!inner) { panel.classList.add('hidden'); return; }
-            panel.innerHTML = '<div class="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-5">' + inner + '</div>';
+            // 현재 타입 파악
+            var curType = data.type || '';
+            // "=" 드롭다운 메뉴 (다른 API 전환)
+            var switchBtn = '<div class="relative inline-block" id="extraSwitchWrap">'
+                + '<button type="button" onclick="toggleExtraSwitch()" class="w-7 h-7 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-500 dark:text-slate-400 transition-colors text-sm font-bold" title="다른 API 보기">=</button>'
+                + '<div id="extraSwitchDrop" class="hidden absolute right-0 top-8 z-50 w-36 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-xl py-1 text-xs">'
+                + extraSwitchItem('places',   'map-pin',      '카카오맵',     'rose',   curType)
+                + extraSwitchItem('shopping', 'shopping-bag',  '쇼핑',  'green',  curType)
+                + extraSwitchItem('news',     'newspaper',     '뉴스',        'blue',   curType)
+                + extraSwitchItem('blog',     'pen-line',      '블로그',      'violet', curType)
+                + extraSwitchItem('youtube',  'play-circle',   '유튜브',      'red',    curType)
+                + extraSwitchItem('wiki',     'globe',         '위키피디아',   'gray',   curType)
+                + extraSwitchItem('weather',  'cloud-sun',     '날씨',        'cyan',   curType)
+                + extraSwitchItem('exchange', 'banknote',      '환율',        'amber',  curType)
+                + '</div></div>';
+
+            panel.innerHTML = '<div class="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-5">'
+                + '<div class="flex justify-end mb-2">' + switchBtn + '</div>'
+                + inner + '</div>';
             panel.classList.remove('hidden');
             if (typeof lucide !== 'undefined') lucide.createIcons();
-        } catch(e) { panel.classList.add('hidden'); }
+        } catch(e) {
+            panel.classList.add('hidden');
+            if (_query) btns.classList.remove('hidden');
+        }
     }
 
     // 패널 공통 헤더
@@ -546,14 +649,14 @@
         return html;
     }
 
-    // 네이버 쇼핑 (가로 스크롤 카드)
+    // 쇼핑 (가로 스크롤 카드)
     function renderShopping(data) {
         var items = data.items || [];
         if (!items.length) return '';
-        var html = panelHeader('shopping-bag', '쇼핑', '네이버 쇼핑');
+        var html = panelHeader('shopping-bag', '쇼핑', 'Google Shopping');
         html += '<div class="flex gap-3 overflow-x-auto pb-2">';
         items.forEach(function(s) {
-            var price = s.price ? parseInt(s.price, 10).toLocaleString() + '원' : '';
+            var price = s.price || '';
             html += '<a href="' + escapeHtml(s.link||'#') + '" target="_blank" rel="noopener"'
                 + ' class="flex-shrink-0 w-36 bg-gray-50 dark:bg-slate-700/50 rounded-xl overflow-hidden hover:shadow-md transition-shadow" style="text-decoration:none">'
                 + (s.image ? '<img src="' + escapeHtml(s.image) + '" alt="" class="w-full h-28 object-cover" onerror="this.style.display=\'none\'">' : '<div class="w-full h-28 bg-gray-200 dark:bg-slate-600 flex items-center justify-center"><i data-lucide="image" class="w-8 h-8 text-gray-400"></i></div>')
@@ -706,7 +809,12 @@
 
     // ── 관련 검색어 렌더링 ──
     function renderRelated() {
-        if (!_related || _related.length === 0) return;
+        var relBtn = document.getElementById('relatedLoadBtn');
+        if (!_related || _related.length === 0) {
+            if (_query) { relBtn.classList.remove('hidden'); relBtn.classList.add('flex'); }
+            return;
+        }
+        relBtn.classList.add('hidden'); relBtn.classList.remove('flex');
         var panel = document.getElementById('relatedPanel');
         var list  = document.getElementById('relatedList');
         list.innerHTML = _related.map(function(r) {
@@ -723,6 +831,201 @@
     function escapeHtml(str) {
         if (!str) return '';
         return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // 속성 이스케이프 (data-* 속성용)
+    function escapeAttr(str) {
+        if (!str) return '';
+        return String(str).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    // ── 북마크 추가 ──
+    function addBookmark(btn) {
+        var data = {
+            title: btn.getAttribute('data-title'),
+            url: btn.getAttribute('data-url'),
+            description: btn.getAttribute('data-desc'),
+            source: btn.getAttribute('data-source')
+        };
+        fetch('/api/bookmarks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            if (res.result === 'ok') {
+                btn.innerHTML = '<i data-lucide="bookmark-check" class="w-3.5 h-3.5"></i> 저장됨';
+                btn.classList.remove('text-gray-400', 'dark:text-slate-500');
+                btn.classList.add('text-orange-500', 'dark:text-orange-400');
+                btn.disabled = true;
+                lucide.createIcons();
+            } else if (res.result === 'duplicate') {
+                btn.innerHTML = '<i data-lucide="bookmark-check" class="w-3.5 h-3.5"></i> 이미 저장됨';
+                btn.classList.add('text-orange-500', 'dark:text-orange-400');
+                lucide.createIcons();
+            } else if (res.result === 'unauthorized') {
+                if (typeof openLogin === 'function') openLogin();
+            }
+        })
+        .catch(function() {});
+    }
+
+    // ── "=" 드롭다운 항목 생성 ──
+    function extraSwitchItem(type, icon, label, color, curType) {
+        var active = (type === curType);
+        var cls = active
+            ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold cursor-default'
+            : 'text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 cursor-pointer';
+        return '<button type="button" ' + (active ? 'disabled' : 'onclick="switchExtra(\'' + type + '\')"')
+            + ' class="w-full flex items-center gap-2 px-3 py-2 ' + cls + ' transition-colors">'
+            + '<i data-lucide="' + icon + '" class="w-3.5 h-3.5 text-' + color + '-500"></i>'
+            + label + (active ? ' <span class="ml-auto text-[10px] opacity-60">현재</span>' : '')
+            + '</button>';
+    }
+
+    // ── "=" 버튼 토글 ──
+    function toggleExtraSwitch() {
+        var drop = document.getElementById('extraSwitchDrop');
+        if (!drop) return;
+        drop.classList.toggle('hidden');
+    }
+
+    // ── 드롭다운에서 다른 API 선택 ──
+    function switchExtra(type) {
+        var drop = document.getElementById('extraSwitchDrop');
+        if (drop) drop.classList.add('hidden');
+        // 패널에 로딩 표시
+        var panel = document.getElementById('extraPanel');
+        var wrap = panel.querySelector('.bg-white, .dark\\:bg-slate-800');
+        if (wrap) {
+            var inner = wrap.querySelectorAll(':scope > div');
+            if (inner.length > 1) inner[1].innerHTML = '<div class="flex items-center justify-center gap-2 py-8 text-gray-400 dark:text-slate-500"><div class="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div> 불러오는 중...</div>';
+        }
+        fetch('/api/search/extra?q=' + encodeURIComponent(_query) + '&type=' + type)
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                if (res.data && res.data !== '{}') {
+                    _extra = res.data;
+                    renderExtraPanel();
+                } else {
+                    // 데이터 없으면 원래 패널 유지 + 알림
+                    if (wrap) {
+                        var inner2 = wrap.querySelectorAll(':scope > div');
+                        if (inner2.length > 1) inner2[1].innerHTML = '<div class="text-center py-4 text-sm text-gray-400 dark:text-slate-500">데이터 없음</div>';
+                    }
+                    setTimeout(function() { renderExtraPanel(); }, 1500);
+                }
+            })
+            .catch(function() {
+                renderExtraPanel();
+            });
+    }
+
+    // ── 드롭다운 외부 클릭 시 닫기 ──
+    document.addEventListener('click', function(e) {
+        var wrap = document.getElementById('extraSwitchWrap');
+        if (wrap && !wrap.contains(e.target)) {
+            var drop = document.getElementById('extraSwitchDrop');
+            if (drop) drop.classList.add('hidden');
+        }
+    });
+
+    // ── 부가정보 개별 타입 호출 ──
+    function loadExtraType(type, btn) {
+        var origHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<div class="w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div> 로딩...';
+
+        fetch('/api/search/extra?q=' + encodeURIComponent(_query) + '&type=' + type)
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                if (res.data && res.data !== '{}') {
+                    _extra = res.data;
+                    renderExtraPanel();
+                    // 성공하면 버튼 영역 숨기고 패널 표시
+                    document.getElementById('extraButtons').classList.add('hidden');
+                } else {
+                    btn.disabled = false;
+                    btn.innerHTML = origHtml;
+                    // 해당 버튼만 실패 표시
+                    btn.classList.add('border-red-300', 'dark:border-red-700');
+                    btn.title = '데이터 없음';
+                }
+            })
+            .catch(function() {
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+                btn.classList.add('border-red-300', 'dark:border-red-700');
+                btn.title = '연결 실패';
+            });
+    }
+
+    // ── 관련 검색어 수동 재호출 ──
+    function reloadRelated() {
+        var btn = document.getElementById('relatedLoadBtn');
+        btn.disabled = true;
+        btn.textContent = '불러오는 중...';
+
+        fetch('/api/search/related?q=' + encodeURIComponent(_query))
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                try {
+                    var arr = JSON.parse(res.related);
+                    if (arr && arr.length > 0) {
+                        _related = arr;
+                        renderRelated();
+                    } else {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i data-lucide="sparkles" class="w-4 h-4"></i> 결과 없음 — 다시 시도';
+                        lucide.createIcons();
+                    }
+                } catch(e) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i data-lucide="sparkles" class="w-4 h-4"></i> 다시 시도';
+                    lucide.createIcons();
+                }
+            })
+            .catch(function() {
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="alert-circle" class="w-4 h-4"></i> 연결 실패 — 다시 시도';
+                lucide.createIcons();
+            });
+    }
+
+    // ── AI 검색 요약 (자동 실행, 실패 시 재시도 버튼) ──
+    function loadAiSummary() {
+        if (!_query) return;
+        var box = document.getElementById('aiSummaryBox');
+        var content = document.getElementById('aiSummaryContent');
+        var retryBtn = document.getElementById('aiRetryBtn');
+
+        // 로딩 상태 표시
+        box.classList.remove('hidden');
+        retryBtn.classList.add('hidden');
+        content.innerHTML = '<div class="flex items-center gap-2"><div class="w-4 h-4 border-2 border-violet-400 border-t-transparent rounded-full animate-spin"></div><span class="text-violet-400 text-xs">AI가 요약을 생성하고 있습니다...</span></div>';
+
+        fetch('/api/ai-summary?q=' + encodeURIComponent(_query))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.summary) {
+                    content.textContent = data.summary;
+                } else if (data.limited) {
+                    content.innerHTML = '<span class="text-violet-400 text-xs">요청 제한에 도달했습니다. 잠시 후 다시 시도해주세요.</span>';
+                    retryBtn.classList.remove('hidden');
+                } else {
+                    // 요약 실패 → 재시도 버튼 표시
+                    box.classList.add('hidden');
+                    retryBtn.classList.remove('hidden');
+                    lucide.createIcons();
+                }
+            })
+            .catch(function() {
+                box.classList.add('hidden');
+                retryBtn.classList.remove('hidden');
+                retryBtn.querySelector('i') && retryBtn.querySelector('i').setAttribute('data-lucide', 'alert-circle');
+                lucide.createIcons();
+            });
     }
 </script>
 }

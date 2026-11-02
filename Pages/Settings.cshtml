@@ -4,6 +4,7 @@
     ViewData["Title"] = "설정";
 }
 
+@Html.AntiForgeryToken()
 <div class="max-w-4xl mx-auto px-6 py-12 min-h-screen">
     <h2 class="text-2xl font-bold mb-8 dark:text-white">@Model.Lang.Get("set.title")</h2>
 
@@ -85,7 +86,7 @@
                 <p class="font-bold dark:text-white">@Model.Lang.Get("set.engineScore")</p>
                 <button onclick="resetScores()" class="text-xs text-red-500 hover:underline cursor-pointer">@Model.Lang.Get("set.resetScores")</button>
             </div>
-            @foreach (var eng in new[] { ("Google", Model.GooglePct, "blue"), ("Naver", Model.NaverPct, "green"), ("Daum", Model.DaumPct, "yellow") })
+            @foreach (var eng in new[] { ("Google", Model.GooglePct, "blue"), ("Naver", Model.NaverPct, "green"), ("Daum", Model.DaumPct, "yellow"), ("Brave", Model.BravePct, "orange") })
             {
                 <div class="mb-3">
                     <div class="flex justify-between text-sm mb-1">
@@ -148,13 +149,23 @@
     </div>
 </div>
 
-<!-- 비밀번호 변경 모달 -->
+<!-- 비밀번호 변경 모달 (새 비밀번호 확인 + 비밀번호 정책 표시) -->
 <div id="pwModal" class="hidden fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
     <div class="bg-white dark:bg-slate-800 p-8 rounded-2xl w-full max-w-sm shadow-2xl">
         <h3 class="text-xl font-bold mb-4 dark:text-white">@Model.Lang.Get("set.changePw")</h3>
         <div class="space-y-3">
             <input type="password" id="oldPw" placeholder="@Model.Lang.Get("set.oldPw")" class="w-full p-3 border dark:border-slate-600 rounded-xl dark:bg-slate-700 dark:text-white" />
-            <input type="password" id="newPw" placeholder="@Model.Lang.Get("set.newPw")" class="w-full p-3 border dark:border-slate-600 rounded-xl dark:bg-slate-700 dark:text-white" />
+            <input type="password" id="newPw" placeholder="@Model.Lang.Get("set.newPw")" oninput="checkPwPolicy()" class="w-full p-3 border dark:border-slate-600 rounded-xl dark:bg-slate-700 dark:text-white" />
+            <input type="password" id="newPwConfirm" placeholder="새 비밀번호 확인" oninput="checkPwMatch()" class="w-full p-3 border dark:border-slate-600 rounded-xl dark:bg-slate-700 dark:text-white" />
+            <!-- 비밀번호 정책 안내 -->
+            <div id="pwPolicy" class="text-xs space-y-1 px-1">
+                <p id="pwLen" class="text-gray-400">● 8자 이상</p>
+                <p id="pwAlpha" class="text-gray-400">● 영문 포함</p>
+                <p id="pwNum" class="text-gray-400">● 숫자 포함</p>
+                <p id="pwSpec" class="text-gray-400">● 특수문자 포함</p>
+            </div>
+            <!-- 비밀번호 일치 여부 -->
+            <p id="pwMatchMsg" class="text-xs px-1 hidden"></p>
             <div class="flex gap-3">
                 <button onclick="changePw()" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold cursor-pointer">@Model.Lang.Get("set.confirm")</button>
                 <button onclick="closePwModal()" class="flex-1 py-3 bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300 rounded-xl font-bold cursor-pointer">@Model.Lang.Get("set.cancel")</button>
@@ -227,17 +238,70 @@
             .then(function(){ location.reload(); });
     }
 
+    // 비밀번호 정책 실시간 검증
+    function checkPwPolicy() {
+        var pw = document.getElementById('newPw').value;
+        var ok = 'text-green-500 font-bold';
+        var ng = 'text-gray-400';
+        document.getElementById('pwLen').className = pw.length >= 8 ? ok : ng;
+        document.getElementById('pwAlpha').className = /[A-Za-z]/.test(pw) ? ok : ng;
+        document.getElementById('pwNum').className = /[0-9]/.test(pw) ? ok : ng;
+        document.getElementById('pwSpec').className = /[^A-Za-z0-9]/.test(pw) ? ok : ng;
+        checkPwMatch();
+    }
+
+    // 비밀번호 일치 확인
+    function checkPwMatch() {
+        var pw = document.getElementById('newPw').value;
+        var confirm = document.getElementById('newPwConfirm').value;
+        var msg = document.getElementById('pwMatchMsg');
+        if (!confirm) { msg.classList.add('hidden'); return; }
+        msg.classList.remove('hidden');
+        if (pw === confirm) {
+            msg.textContent = '비밀번호가 일치합니다.';
+            msg.className = 'text-xs px-1 text-green-500 font-bold';
+        } else {
+            msg.textContent = '비밀번호가 일치하지 않습니다.';
+            msg.className = 'text-xs px-1 text-red-500';
+        }
+    }
+
     // 비밀번호 변경
-    function openPwModal() { document.getElementById('pwModal').classList.remove('hidden'); }
+    function openPwModal() {
+        document.getElementById('pwModal').classList.remove('hidden');
+        document.getElementById('oldPw').value = '';
+        document.getElementById('newPw').value = '';
+        document.getElementById('newPwConfirm').value = '';
+        document.getElementById('pwMatchMsg').classList.add('hidden');
+        // 정책 표시 초기화
+        ['pwLen','pwAlpha','pwNum','pwSpec'].forEach(function(id){
+            document.getElementById(id).className = 'text-gray-400';
+        });
+    }
     function closePwModal() { document.getElementById('pwModal').classList.add('hidden'); }
     function changePw() {
         var o = document.getElementById('oldPw').value;
         var n = document.getElementById('newPw').value;
+        var nc = document.getElementById('newPwConfirm').value;
         if (!o || !n) return;
-        fetch('/Settings?handler=ChangePw&oldPw=' + encodeURIComponent(o) + '&newPw=' + encodeURIComponent(n))
+        // 비밀번호 확인 일치 검증
+        if (n !== nc) { alert('새 비밀번호가 일치하지 않습니다.'); return; }
+        // 프론트엔드 비밀번호 정책 검증
+        if (n.length < 8 || !/[A-Za-z]/.test(n) || !/[0-9]/.test(n) || !/[^A-Za-z0-9]/.test(n)) {
+            alert('비밀번호는 8자 이상, 영문+숫자+특수문자를 포함해야 합니다.');
+            return;
+        }
+        // POST로 전달하여 URL에 비밀번호 노출 방지
+        var form = new FormData();
+        form.append('oldPw', o);
+        form.append('newPw', n);
+        var token = document.querySelector('input[name="__RequestVerificationToken"]');
+        if (token) form.append('__RequestVerificationToken', token.value);
+        fetch('/Settings?handler=ChangePw', { method: 'POST', body: form })
             .then(function(r){ return r.json(); })
             .then(function(d){
                 if (d.result === 'ok') { alert('@Html.Raw(Model.Lang.Get("set.pwChanged"))'); closePwModal(); }
+                else if (d.result === 'weak_password') alert('비밀번호는 8자 이상, 영문+숫자+특수문자를 포함해야 합니다.');
                 else alert('@Html.Raw(Model.Lang.Get("set.wrongPw"))');
             });
     }
